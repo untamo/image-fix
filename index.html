@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Remove distracting vertical lines from an image in your browser."
+      content="Remove distracting vertical or horizontal lines from an image in your browser."
     />
-    <title>LineLift — remove vertical lines</title>
+    <title>LineLift — remove image lines</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -19,9 +19,9 @@
             <path d="M12 4v24M20 4v24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".45" />
           </svg>
         </span>
-        <span class="brand-copy">
-          <strong>LineLift</strong>
-          <span>Vertical line cleanup</span>
+          <span class="brand-copy">
+            <strong>LineLift</strong>
+            <span>Image line cleanup</span>
         </span>
       </a>
 
@@ -45,7 +45,7 @@
       <section class="page-intro" aria-labelledby="pageTitle">
         <div>
           <p class="eyebrow">Image workspace</p>
-          <h1 id="pageTitle">Clean up vertical lines.</h1>
+          <h1 id="pageTitle">Clean up distracting lines.</h1>
           <p class="intro-copy">
             Drop in an image, review the detected guides, and remove distracting lines with a single click.
           </p>
@@ -119,6 +119,25 @@
 
           <div class="control-block">
             <div class="control-label-row">
+              <span class="control-label">Line direction</span>
+              <span class="direction-hint">Choose what to find</span>
+            </div>
+            <div class="segmented-control" role="group" aria-label="Line direction">
+              <button class="segment-button is-active" type="button" data-orientation="vertical" aria-pressed="true">
+                Vertical
+              </button>
+              <button class="segment-button" type="button" data-orientation="horizontal" aria-pressed="false">
+                Horizontal
+              </button>
+              <button class="segment-button" type="button" data-orientation="both" aria-pressed="false">
+                Both
+              </button>
+            </div>
+            <p class="helper-text">Choose the direction of the lines you want to detect and remove.</p>
+          </div>
+
+          <div class="control-block">
+            <div class="control-label-row">
               <label for="sensitivity">Detection sensitivity</label>
               <output id="sensitivityValue" for="sensitivity">60%</output>
             </div>
@@ -147,13 +166,13 @@
                 <path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8" />
               </svg>
-              Detect vertical lines
+              <span id="detectButtonLabel">Detect vertical lines</span>
             </button>
             <button class="button button-primary button-wide" id="removeButton" type="button" disabled>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
               </svg>
-              Remove detected lines
+              <span id="removeButtonLabel">Remove detected lines</span>
             </button>
           </div>
 
