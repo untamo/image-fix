@@ -8,6 +8,7 @@ const state = {
   history: [],
   guidesVisible: true,
   fileBaseName: "cleaned-image",
+  orientation: "vertical",
 };
 
 const elements = {
@@ -23,13 +24,16 @@ const elements = {
   statusText: document.querySelector("#statusText"),
   guideSummary: document.querySelector("#guideSummary"),
   errorNotice: document.querySelector("#errorNotice"),
+  orientationButtons: Array.from(document.querySelectorAll("[data-orientation]")),
   sensitivity: document.querySelector("#sensitivity"),
   sensitivityValue: document.querySelector("#sensitivityValue"),
   lineCount: document.querySelector("#lineCount"),
   lineCoverage: document.querySelector("#lineCoverage"),
   detectionStatus: document.querySelector("#detectionStatus"),
   detectButton: document.querySelector("#detectButton"),
+  detectButtonLabel: document.querySelector("#detectButtonLabel"),
   removeButton: document.querySelector("#removeButton"),
+  removeButtonLabel: document.querySelector("#removeButtonLabel"),
   undoButton: document.querySelector("#undoButton"),
   resetButton: document.querySelector("#resetButton"),
   downloadButton: document.querySelector("#downloadButton"),
@@ -67,6 +71,51 @@ function hasImage() {
   return Boolean(state.workingImageData);
 }
 
+function directionDescription(orientation = state.orientation) {
+  if (orientation === "both") return "vertical or horizontal";
+  return orientation;
+}
+
+function detectionDescription(detections = state.detections) {
+  const counts = detections.reduce(
+    (summary, line) => {
+      summary[line.orientation] = (summary[line.orientation] || 0) + 1;
+      return summary;
+    },
+    { vertical: 0, horizontal: 0 },
+  );
+
+  const parts = [];
+  if (counts.vertical) parts.push(`${counts.vertical} vertical`);
+  if (counts.horizontal) parts.push(`${counts.horizontal} horizontal`);
+  return parts.join(" + ");
+}
+
+function updateActionLabels() {
+  const detectLabel = state.orientation === "both"
+    ? "Detect both orientations"
+    : `Detect ${state.orientation} lines`;
+  const removeLabel = state.orientation === "both"
+    ? "Remove detected lines"
+    : `Remove detected ${state.orientation} lines`;
+
+  elements.detectButtonLabel.textContent = detectLabel;
+  elements.removeButtonLabel.textContent = removeLabel;
+
+  elements.orientationButtons.forEach((button) => {
+    const isActive = button.dataset.orientation === state.orientation;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function setOrientation(orientation) {
+  if (!["vertical", "horizontal", "both"].includes(orientation)) return;
+  state.orientation = orientation;
+  updateActionLabels();
+  if (state.sourceImageData) runDetection({ announce: false });
+}
+
 function updateControls() {
   const loaded = hasImage();
   elements.detectButton.disabled = !loaded;
@@ -90,12 +139,12 @@ function updateDetectionSummary() {
   }
 
   if (count === 0) {
-    elements.lineCoverage.textContent = "No strong full-height vertical lines found at this sensitivity.";
-    elements.guideSummary.textContent = "No vertical lines detected";
+    elements.lineCoverage.textContent = `No strong ${directionDescription()} lines found at this sensitivity.`;
+    elements.guideSummary.textContent = `No ${directionDescription()} lines detected`;
     setDetectionStatus("Clear", "success");
   } else {
-    const totalWidth = state.detections.reduce((sum, line) => sum + line.width, 0);
-    elements.lineCoverage.textContent = `${totalWidth}px across ${count} candidate${count === 1 ? "" : "s"}. Review the guides before removing.`;
+    const summary = detectionDescription();
+    elements.lineCoverage.textContent = `${summary} guide${count === 1 ? "" : "s"} highlighted. Review before removing.`;
     elements.guideSummary.textContent = `${count} candidate line${count === 1 ? "" : "s"} highlighted`;
     setDetectionStatus("Review", "success");
   }
@@ -114,12 +163,18 @@ function drawGuides() {
 
   const { width, height } = state.workingImageData;
   state.detections.forEach((line) => {
-    guideContext.fillStyle = "rgba(194, 245, 109, 0.15)";
-    guideContext.strokeStyle = "rgba(220, 255, 157, 0.95)";
+    const isVertical = line.orientation === "vertical";
+    guideContext.fillStyle = isVertical ? "rgba(194, 245, 109, 0.15)" : "rgba(103, 211, 255, 0.15)";
+    guideContext.strokeStyle = isVertical ? "rgba(220, 255, 157, 0.95)" : "rgba(145, 231, 255, 0.95)";
     guideContext.lineWidth = Math.max(1, Math.min(3, width / 900));
     guideContext.setLineDash([5, 4]);
-    guideContext.fillRect(line.start, 0, line.width, height);
-    guideContext.strokeRect(line.start + 0.5, 0.5, Math.max(1, line.width - 1), Math.max(1, height - 1));
+    if (isVertical) {
+      guideContext.fillRect(line.start, 0, line.width, height);
+      guideContext.strokeRect(line.start + 0.5, 0.5, Math.max(1, line.width - 1), Math.max(1, height - 1));
+    } else {
+      guideContext.fillRect(0, line.start, width, line.width);
+      guideContext.strokeRect(0.5, line.start + 0.5, Math.max(1, width - 1), Math.max(1, line.width - 1));
+    }
   });
   guideContext.setLineDash([]);
 }
@@ -145,9 +200,12 @@ function median(values) {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-function detectVerticalLines(imageData, sensitivity) {
+function detectLines(imageData, sensitivity, orientation) {
   const { width, height, data } = imageData;
-  if (width < 5 || height < 12) return [];
+  const isVertical = orientation === "vertical";
+  const axisLength = isVertical ? width : height;
+  const crossLength = isVertical ? height : width;
+  if (axisLength < 5 || crossLength < 12) return [];
 
   const luma = new Float32Array(width * height);
   for (let y = 0; y < height; y += 1) {
@@ -157,68 +215,70 @@ function detectVerticalLines(imageData, sensitivity) {
     }
   }
 
-  const responses = new Float32Array(width);
-  const coverage = new Float32Array(width);
+  const responses = new Float32Array(axisLength);
+  const coverage = new Float32Array(axisLength);
   const pixelThreshold = 9 + ((100 - sensitivity) / 100) * 20;
 
-  for (let x = 1; x < width - 1; x += 1) {
+  for (let axis = 1; axis < axisLength - 1; axis += 1) {
     let responseTotal = 0;
     let hitCount = 0;
 
-    for (let y = 0; y < height; y += 1) {
-      const index = y * width + x;
-      const neighbourAverage = (luma[index - 1] + luma[index + 1]) / 2;
+    for (let cross = 0; cross < crossLength; cross += 1) {
+      const index = isVertical ? cross * width + axis : axis * width + cross;
+      const neighbourAverage = isVertical
+        ? (luma[index - 1] + luma[index + 1]) / 2
+        : (luma[index - width] + luma[index + width]) / 2;
       const difference = Math.abs(luma[index] - neighbourAverage);
       responseTotal += difference;
       if (difference >= pixelThreshold) hitCount += 1;
     }
 
-    responses[x] = responseTotal / height;
-    coverage[x] = hitCount / height;
+    responses[axis] = responseTotal / crossLength;
+    coverage[axis] = hitCount / crossLength;
   }
 
-  const responseValues = Array.from(responses.slice(1, width - 1));
+  const responseValues = Array.from(responses.slice(1, axisLength - 1));
   const responseMedian = median(responseValues);
   const deviation = responseValues.map((value) => Math.abs(value - responseMedian));
   const noiseScale = Math.max(1.5, median(deviation) * 1.4826);
   const strictness = 3.2 - (sensitivity / 100) * 1.8;
   const responseThreshold = responseMedian + noiseScale * strictness;
   const coverageThreshold = 0.18 + ((100 - sensitivity) / 100) * 0.2;
-  const candidates = new Uint8Array(width);
+  const candidates = new Uint8Array(axisLength);
 
-  for (let x = 2; x < width - 2; x += 1) {
-    candidates[x] = responses[x] >= responseThreshold && coverage[x] >= coverageThreshold ? 1 : 0;
+  for (let axis = 2; axis < axisLength - 2; axis += 1) {
+    candidates[axis] = responses[axis] >= responseThreshold && coverage[axis] >= coverageThreshold ? 1 : 0;
   }
 
   const lines = [];
   let start = -1;
-  const maxLineWidth = Math.max(8, Math.min(48, Math.round(width * 0.012)));
+  const maxLineWidth = Math.max(8, Math.min(48, Math.round(axisLength * 0.012)));
 
   const finishLine = (end) => {
     if (start < 0) return;
     const widthOfLine = end - start + 1;
     if (widthOfLine <= maxLineWidth) {
-      lines.push({ start, end, width: widthOfLine });
+      lines.push({ orientation, start, end, width: widthOfLine });
     }
     start = -1;
   };
 
-  for (let x = 2; x < width - 2; x += 1) {
-    if (candidates[x]) {
-      if (start < 0) start = x;
+  for (let axis = 2; axis < axisLength - 2; axis += 1) {
+    if (candidates[axis]) {
+      if (start < 0) start = axis;
     } else if (start >= 0) {
-      finishLine(x - 1);
+      finishLine(axis - 1);
     }
   }
-  finishLine(width - 3);
+  finishLine(axisLength - 3);
 
-  return mergeNearbyLines(lines, width);
+  return mergeNearbyLines(lines, axisLength);
 }
 
-function mergeNearbyLines(lines, imageWidth) {
+function mergeNearbyLines(lines, axisLength) {
   if (lines.length < 2) return lines;
   const merged = [];
-  const gapLimit = Math.max(2, Math.round(imageWidth * 0.0015));
+  const gapLimit = Math.max(2, Math.round(axisLength * 0.0015));
 
   lines.forEach((line) => {
     const previous = merged[merged.length - 1];
@@ -236,7 +296,14 @@ function mergeNearbyLines(lines, imageWidth) {
 function runDetection({ announce = true } = {}) {
   if (!state.sourceImageData) return;
   const sensitivity = Number(elements.sensitivity.value);
-  state.detections = detectVerticalLines(state.sourceImageData, sensitivity);
+  if (state.orientation === "both") {
+    state.detections = [
+      ...detectLines(state.sourceImageData, sensitivity, "vertical"),
+      ...detectLines(state.sourceImageData, sensitivity, "horizontal"),
+    ];
+  } else {
+    state.detections = detectLines(state.sourceImageData, sensitivity, state.orientation);
+  }
   drawGuides();
   updateDetectionSummary();
   if (announce) {
@@ -244,20 +311,11 @@ function runDetection({ announce = true } = {}) {
   }
 }
 
-function removeDetectedLines() {
-  if (!state.workingImageData || !state.detections.length) return;
+function interpolateDetectedLine(data, width, height, line) {
+  const padding = Math.max(2, Math.min(12, Math.ceil(line.width * 0.8)));
+  const isVertical = line.orientation === "vertical";
 
-  state.history.push({
-    imageData: cloneImageData(state.workingImageData),
-    detections: state.detections.map((line) => ({ ...line })),
-  });
-
-  const cleaned = cloneImageData(state.workingImageData);
-  const { width, height, data } = cleaned;
-  const removedCount = state.detections.length;
-
-  state.detections.forEach((line) => {
-    const padding = Math.max(2, Math.min(12, Math.ceil(line.width * 0.8)));
+  if (isVertical) {
     const left = Math.max(0, line.start - padding);
     const right = Math.min(width - 1, line.end + padding);
 
@@ -273,13 +331,53 @@ function removeDetectedLines() {
         data[destination + 3] = Math.round(data[leftPixel + 3] * (1 - proportion) + data[rightPixel + 3] * proportion);
       }
     }
+    return;
+  }
+
+  const top = Math.max(0, line.start - padding);
+  const bottom = Math.min(height - 1, line.end + padding);
+
+  for (let x = 0; x < width; x += 1) {
+    const topPixel = (top * width + x) * 4;
+    const bottomPixel = (bottom * width + x) * 4;
+    for (let y = line.start; y <= line.end; y += 1) {
+      const destination = (y * width + x) * 4;
+      const proportion = bottom === top ? 0 : (y - top) / (bottom - top);
+      data[destination] = Math.round(data[topPixel] * (1 - proportion) + data[bottomPixel] * proportion);
+      data[destination + 1] = Math.round(data[topPixel + 1] * (1 - proportion) + data[bottomPixel + 1] * proportion);
+      data[destination + 2] = Math.round(data[topPixel + 2] * (1 - proportion) + data[bottomPixel + 2] * proportion);
+      data[destination + 3] = Math.round(data[topPixel + 3] * (1 - proportion) + data[bottomPixel + 3] * proportion);
+    }
+  }
+}
+
+function removeDetectedLines() {
+  if (!state.workingImageData || !state.detections.length) return;
+
+  state.history.push({
+    imageData: cloneImageData(state.workingImageData),
+    detections: state.detections.map((line) => ({ ...line })),
+  });
+
+  const cleaned = cloneImageData(state.workingImageData);
+  const { width, height, data } = cleaned;
+  const removedCount = state.detections.length;
+  const removedDescription = detectionDescription(state.detections);
+  const removedOrientation = state.detections[0].orientation;
+
+  state.detections.forEach((line) => {
+    interpolateDetectedLine(data, width, height, line);
   });
 
   state.workingImageData = cleaned;
   state.detections = [];
   renderWorkingImage();
   updateDetectionSummary();
-  setStatus(`Removed ${removedCount} line${removedCount === 1 ? "" : "s"}`, "success");
+  if (removedCount === 1) {
+    setStatus(`Removed 1 ${removedOrientation} line`, "success");
+  } else {
+    setStatus(`Removed ${removedDescription} lines`, "success");
+  }
 }
 
 function undoLastEdit() {
@@ -396,6 +494,9 @@ elements.fileInput.addEventListener("change", (event) => {
   loadImageFile(event.target.files[0]);
   event.target.value = "";
 });
+elements.orientationButtons.forEach((button) => {
+  button.addEventListener("click", () => setOrientation(button.dataset.orientation));
+});
 elements.detectButton.addEventListener("click", () => runDetection());
 elements.removeButton.addEventListener("click", removeDetectedLines);
 elements.undoButton.addEventListener("click", undoLastEdit);
@@ -445,5 +546,6 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+updateActionLabels();
 elements.sensitivityValue.textContent = `${elements.sensitivity.value}%`;
 updateDetectionSummary();
