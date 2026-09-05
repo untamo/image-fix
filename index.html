@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Remove distracting vertical lines from an image in your browser."
+    />
+    <title>LineLift — remove vertical lines</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="LineLift home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path d="M6 7.5h20M6 16h20M6 24.5h20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+            <path d="M12 4v24M20 4v24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".45" />
+          </svg>
+        </span>
+        <span class="brand-copy">
+          <strong>LineLift</strong>
+          <span>Vertical line cleanup</span>
+        </span>
+      </a>
+
+      <div class="topbar-actions">
+        <button class="button button-ghost" id="undoButton" type="button" disabled>
+          Undo
+        </button>
+        <button class="button button-ghost" id="resetButton" type="button" disabled>
+          Reset
+        </button>
+        <button class="button button-primary" id="downloadButton" type="button" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16.5v2A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Download PNG
+        </button>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="page-intro" aria-labelledby="pageTitle">
+        <div>
+          <p class="eyebrow">Image workspace</p>
+          <h1 id="pageTitle">Clean up vertical lines.</h1>
+          <p class="intro-copy">
+            Drop in an image, review the detected guides, and remove distracting lines with a single click.
+          </p>
+        </div>
+        <div class="privacy-note">
+          <span class="privacy-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M7 10V8a5 5 0 0 1 10 0v2M6 10h12v10H6V10Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <span>Runs in your browser</span>
+        </div>
+      </section>
+
+      <div class="workspace-grid">
+        <section class="panel canvas-panel" aria-labelledby="workspaceHeading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Workspace</p>
+              <h2 id="workspaceHeading">No image loaded</h2>
+            </div>
+            <div class="status-chip" id="statusChip">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="statusText">Waiting for an image</span>
+            </div>
+          </div>
+
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose an image or drag one here">
+            <input id="fileInput" type="file" accept="image/*" hidden />
+            <div class="dropzone-icon" aria-hidden="true">
+              <svg viewBox="0 0 32 32" fill="none">
+                <rect x="4" y="5" width="24" height="22" rx="4" stroke="currentColor" stroke-width="1.8" />
+                <circle cx="11" cy="12" r="2.2" stroke="currentColor" stroke-width="1.8" />
+                <path d="m7 24 6.2-6 4.1 3.7 2.8-2.8L26 25" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </div>
+            <h3>Drop an image here</h3>
+            <p>PNG, JPG, or WebP up to 20 MB</p>
+            <button class="button button-secondary" id="chooseButton" type="button">
+              Choose image
+            </button>
+          </div>
+
+          <div class="canvas-area hidden" id="canvasArea">
+            <div class="canvas-stage" id="canvasStage">
+              <canvas id="previewCanvas" aria-label="Image preview"></canvas>
+              <canvas id="guideCanvas" aria-hidden="true"></canvas>
+            </div>
+          </div>
+
+          <div class="canvas-footer">
+            <div class="guide-summary">
+              <span class="legend-line" aria-hidden="true"></span>
+              <span id="guideSummary">Detected lines will appear as guides</span>
+            </div>
+            <button class="text-button" id="toggleGuidesButton" type="button" disabled aria-pressed="true">
+              Hide guides
+            </button>
+          </div>
+          <p class="notice notice-error hidden" id="errorNotice" role="alert"></p>
+        </section>
+
+        <aside class="panel controls-panel" aria-labelledby="controlsHeading">
+          <div class="panel-heading compact">
+            <div>
+              <p class="eyebrow">Controls</p>
+              <h2 id="controlsHeading">Line removal</h2>
+            </div>
+            <span class="control-badge">Auto</span>
+          </div>
+
+          <div class="control-block">
+            <div class="control-label-row">
+              <label for="sensitivity">Detection sensitivity</label>
+              <output id="sensitivityValue" for="sensitivity">60%</output>
+            </div>
+            <input id="sensitivity" type="range" min="10" max="95" value="60" />
+            <div class="range-labels" aria-hidden="true">
+              <span>Precise</span>
+              <span>Find more</span>
+            </div>
+            <p class="helper-text">Raise sensitivity when a faint line is not highlighted. Lower it to reduce extra guides.</p>
+          </div>
+
+          <div class="detection-card">
+            <div class="detection-card-top">
+              <div>
+                <span class="metric-label">Detected guides</span>
+                <strong id="lineCount">0</strong>
+              </div>
+              <span class="metric-status" id="detectionStatus">Waiting</span>
+            </div>
+            <p id="lineCoverage">Upload an image to begin detection.</p>
+          </div>
+
+          <div class="control-actions">
+            <button class="button button-secondary button-wide" id="detectButton" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8" />
+              </svg>
+              Detect vertical lines
+            </button>
+            <button class="button button-primary button-wide" id="removeButton" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              Remove detected lines
+            </button>
+          </div>
+
+          <div class="how-it-works">
+            <p class="eyebrow">How it works</p>
+            <ol>
+              <li><span>1</span><p>Upload your image</p></li>
+              <li><span>2</span><p>Review the highlighted guides</p></li>
+              <li><span>3</span><p>Download the cleaned PNG</p></li>
+            </ol>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="page-footer">
+        <span>LineLift keeps processing local to this browser session.</span>
+        <span class="footer-separator" aria-hidden="true"></span>
+        <span>No image is uploaded.</span>
+      </footer>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
