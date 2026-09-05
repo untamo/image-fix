@@ -457,6 +457,54 @@ h1 {
   font-weight: 600;
 }
 
+.control-label {
+  color: var(--muted-strong);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.direction-hint {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 14px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+
+.segment-button {
+  min-height: 36px;
+  padding: 8px 6px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.segment-button:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.segment-button.is-active {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.segment-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 .control-label-row output {
   color: var(--accent);
   font-size: 0.82rem;
