@@ -24,7 +24,9 @@ const elements = {
   statusText: document.querySelector("#statusText"),
   guideSummary: document.querySelector("#guideSummary"),
   errorNotice: document.querySelector("#errorNotice"),
-  orientationButtons: Array.from(document.querySelectorAll("[data-orientation]")),
+  orientationInputs: Array.from(document.querySelectorAll('input[name="orientation"]')),
+  directionHint: document.querySelector("#directionHint"),
+  legacyOrientationButtons: Array.from(document.querySelectorAll("button[data-orientation]")),
   sensitivity: document.querySelector("#sensitivity"),
   sensitivityValue: document.querySelector("#sensitivityValue"),
   lineCount: document.querySelector("#lineCount"),
@@ -102,7 +104,15 @@ function updateActionLabels() {
   elements.detectButtonLabel.textContent = detectLabel;
   elements.removeButtonLabel.textContent = removeLabel;
 
-  elements.orientationButtons.forEach((button) => {
+  elements.orientationInputs.forEach((input) => {
+    input.checked = input.value === state.orientation;
+  });
+  if (elements.directionHint) {
+    const label = state.orientation === "both" ? "Both directions" : state.orientation;
+    elements.directionHint.textContent = `${label.charAt(0).toUpperCase()}${label.slice(1)} selected`;
+  }
+  // Keep a cached copy of the previous HTML usable until it is refreshed.
+  elements.legacyOrientationButtons.forEach((button) => {
     const isActive = button.dataset.orientation === state.orientation;
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
@@ -113,7 +123,10 @@ function setOrientation(orientation) {
   if (!["vertical", "horizontal", "both"].includes(orientation)) return;
   state.orientation = orientation;
   updateActionLabels();
-  if (state.sourceImageData) runDetection({ announce: false });
+  if (hasImage()) {
+    setGuidesVisible(true);
+    runDetection();
+  }
 }
 
 function updateControls() {
@@ -141,11 +154,11 @@ function updateDetectionSummary() {
   if (count === 0) {
     elements.lineCoverage.textContent = `No strong ${directionDescription()} lines found at this sensitivity.`;
     elements.guideSummary.textContent = `No ${directionDescription()} lines detected`;
-    setDetectionStatus("Clear", "success");
+    setDetectionStatus("None found");
   } else {
     const summary = detectionDescription();
     elements.lineCoverage.textContent = `${summary} guide${count === 1 ? "" : "s"} highlighted. Review before removing.`;
-    elements.guideSummary.textContent = `${count} candidate line${count === 1 ? "" : "s"} highlighted`;
+    elements.guideSummary.textContent = `${summary} guide${count === 1 ? "" : "s"} ${state.guidesVisible ? "highlighted" : "hidden"}`;
     setDetectionStatus("Review", "success");
   }
 
@@ -153,30 +166,54 @@ function updateDetectionSummary() {
 }
 
 function drawGuides() {
+  guideContext.setTransform(1, 0, 0, 1, 0, 0);
+  guideContext.clearRect(0, 0, elements.guideCanvas.width, elements.guideCanvas.height);
   if (!state.workingImageData) {
-    guideContext.clearRect(0, 0, elements.guideCanvas.width, elements.guideCanvas.height);
     return;
   }
 
-  guideContext.clearRect(0, 0, elements.guideCanvas.width, elements.guideCanvas.height);
+  // Use display pixels, not image pixels, so highlights stay bold on phones.
+  const bounds = elements.previewCanvas.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return;
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 3);
+  elements.guideCanvas.width = Math.round(bounds.width * pixelRatio);
+  elements.guideCanvas.height = Math.round(bounds.height * pixelRatio);
+  guideContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   if (!state.guidesVisible) return;
 
   const { width, height } = state.workingImageData;
   state.detections.forEach((line) => {
     const isVertical = line.orientation === "vertical";
-    guideContext.fillStyle = isVertical ? "rgba(194, 245, 109, 0.15)" : "rgba(103, 211, 255, 0.15)";
-    guideContext.strokeStyle = isVertical ? "rgba(220, 255, 157, 0.95)" : "rgba(145, 231, 255, 0.95)";
-    guideContext.lineWidth = Math.max(1, Math.min(3, width / 900));
-    guideContext.setLineDash([5, 4]);
+    const color = isVertical ? "#c2f56d" : "#67d3ff";
+    const scale = isVertical ? bounds.width / width : bounds.height / height;
+    const center = (line.start + line.width / 2) * scale;
+    const bandWidth = Math.max(10, line.width * scale);
+    guideContext.fillStyle = isVertical ? "rgba(194, 245, 109, 0.3)" : "rgba(103, 211, 255, 0.3)";
     if (isVertical) {
-      guideContext.fillRect(line.start, 0, line.width, height);
-      guideContext.strokeRect(line.start + 0.5, 0.5, Math.max(1, line.width - 1), Math.max(1, height - 1));
+      guideContext.fillRect(center - bandWidth / 2, 0, bandWidth, bounds.height);
     } else {
-      guideContext.fillRect(0, line.start, width, line.width);
-      guideContext.strokeRect(0.5, line.start + 0.5, Math.max(1, width - 1), Math.max(1, line.width - 1));
+      guideContext.fillRect(0, center - bandWidth / 2, bounds.width, bandWidth);
+    }
+
+    guideContext.beginPath();
+    guideContext.moveTo(isVertical ? center : 0, isVertical ? 0 : center);
+    guideContext.lineTo(isVertical ? center : bounds.width, isVertical ? bounds.height : center);
+    // A dark outline plus a bright core is visible on both light and dark images.
+    guideContext.strokeStyle = "rgba(5, 8, 12, 0.95)";
+    guideContext.lineWidth = 6;
+    guideContext.stroke();
+    guideContext.strokeStyle = color;
+    guideContext.lineWidth = 3;
+    guideContext.stroke();
+    guideContext.fillStyle = color;
+    if (isVertical) {
+      guideContext.fillRect(center - 5, 0, 10, 6);
+      guideContext.fillRect(center - 5, bounds.height - 6, 10, 6);
+    } else {
+      guideContext.fillRect(0, center - 5, 6, 10);
+      guideContext.fillRect(bounds.width - 6, center - 5, 6, 10);
     }
   });
-  guideContext.setLineDash([]);
 }
 
 function renderWorkingImage() {
@@ -184,8 +221,6 @@ function renderWorkingImage() {
   const { width, height } = state.workingImageData;
   elements.previewCanvas.width = width;
   elements.previewCanvas.height = height;
-  elements.guideCanvas.width = width;
-  elements.guideCanvas.height = height;
   previewContext.putImageData(state.workingImageData, 0, 0);
   drawGuides();
 }
@@ -200,59 +235,78 @@ function median(values) {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-function detectLines(imageData, sensitivity, orientation) {
+function imageLuminance(imageData) {
   const { width, height, data } = imageData;
+  const luma = new Float32Array(width * height);
+  for (let index = 0; index < luma.length; index += 1) {
+    const pixel = index * 4;
+    luma[index] = data[pixel + 3] < 16 ? NaN : luminance(data[pixel], data[pixel + 1], data[pixel + 2]);
+  }
+  return luma;
+}
+
+function detectLines(imageData, sensitivity, orientation, luma = imageLuminance(imageData)) {
+  const { width, height } = imageData;
   const isVertical = orientation === "vertical";
   const axisLength = isVertical ? width : height;
   const crossLength = isVertical ? height : width;
   if (axisLength < 5 || crossLength < 12) return [];
 
-  const luma = new Float32Array(width * height);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const pixel = (y * width + x) * 4;
-      luma[y * width + x] = luminance(data[pixel], data[pixel + 1], data[pixel + 2]);
-    }
-  }
-
-  const responses = new Float32Array(axisLength);
-  const coverage = new Float32Array(axisLength);
-  const pixelThreshold = 9 + ((100 - sensitivity) / 100) * 20;
-
-  for (let axis = 1; axis < axisLength - 1; axis += 1) {
-    let responseTotal = 0;
-    let hitCount = 0;
-
-    for (let cross = 0; cross < crossLength; cross += 1) {
-      const index = isVertical ? cross * width + axis : axis * width + cross;
-      const neighbourAverage = isVertical
-        ? (luma[index - 1] + luma[index + 1]) / 2
-        : (luma[index - width] + luma[index + width]) / 2;
-      const difference = Math.abs(luma[index] - neighbourAverage);
-      responseTotal += difference;
-      if (difference >= pixelThreshold) hitCount += 1;
-    }
-
-    responses[axis] = responseTotal / crossLength;
-    coverage[axis] = hitCount / crossLength;
-  }
-
-  const responseValues = Array.from(responses.slice(1, axisLength - 1));
-  const responseMedian = median(responseValues);
-  const deviation = responseValues.map((value) => Math.abs(value - responseMedian));
-  const noiseScale = Math.max(1.5, median(deviation) * 1.4826);
-  const strictness = 3.2 - (sensitivity / 100) * 1.8;
-  const responseThreshold = responseMedian + noiseScale * strictness;
-  const coverageThreshold = 0.18 + ((100 - sensitivity) / 100) * 0.2;
+  const amount = Math.max(10, Math.min(95, sensitivity)) / 100;
+  const pixelThreshold = 3 + (1 - amount) * 28;
+  const coverageThreshold = 0.15 + (1 - amount) * 0.4;
+  const maxLineWidth = Math.max(8, Math.min(48, Math.round(axisLength * 0.012)));
+  // Sample evenly along the line to bound work on large phone images.
+  const sampleCount = Math.min(crossLength, 512);
+  const sampleOffsets = Array.from({ length: sampleCount }, (_, sample) => {
+    const cross = Math.round(sample * (crossLength - 1) / (sampleCount - 1));
+    return isVertical ? cross * width : cross;
+  });
+  const stride = isVertical ? 1 : width;
   const candidates = new Uint8Array(axisLength);
+  const radii = [1, 2, 4, 8, 16, 32, maxLineWidth].filter(
+    (radius, index, values) => radius <= maxLineWidth && values.indexOf(radius) === index,
+  );
 
-  for (let axis = 2; axis < axisLength - 2; axis += 1) {
-    candidates[axis] = responses[axis] >= responseThreshold && coverage[axis] >= coverageThreshold ? 1 : 0;
+  for (const radius of radii) {
+    const responses = new Float32Array(axisLength);
+    const coverage = new Float32Array(axisLength);
+    for (let axis = 1; axis < axisLength - 1; axis += 1) {
+      const centerOffset = axis * stride;
+      const beforeOffset = Math.max(0, axis - radius) * stride;
+      const afterOffset = Math.min(axisLength - 1, axis + radius) * stride;
+      let total = 0;
+      let lightHits = 0;
+      let darkHits = 0;
+      for (const crossOffset of sampleOffsets) {
+        const value = luma[centerOffset + crossOffset];
+        const before = value - luma[beforeOffset + crossOffset];
+        const after = value - luma[afterOffset + crossOffset];
+        // A stripe contrasts with BOTH sides. A lone object edge does not.
+        // Multiple radii find the entire band, including wider stripe interiors.
+        const contrast = before > 0 && after > 0 ? Math.min(before, after)
+          : before < 0 && after < 0 ? Math.max(before, after) : 0;
+        total += Math.abs(contrast);
+        if (contrast >= pixelThreshold) lightHits += 1;
+        if (contrast <= -pixelThreshold) darkHits += 1;
+      }
+      responses[axis] = total / sampleCount;
+      coverage[axis] = Math.max(lightHits, darkHits) / sampleCount;
+    }
+    const values = Array.from(responses.slice(1, -1));
+    const typicalResponse = median(values);
+    const deviation = median(values.map((value) => Math.abs(value - typicalResponse)));
+    const threshold = Math.max(
+      pixelThreshold * coverageThreshold,
+      typicalResponse + Math.max(1, deviation * 1.4826) * (3.2 - amount * 1.8),
+    );
+    for (let axis = 1; axis < axisLength - 1; axis += 1) {
+      if (responses[axis] >= threshold && coverage[axis] >= coverageThreshold) candidates[axis] = 1;
+    }
   }
 
   const lines = [];
   let start = -1;
-  const maxLineWidth = Math.max(8, Math.min(48, Math.round(axisLength * 0.012)));
 
   const finishLine = (end) => {
     if (start < 0) return;
@@ -263,26 +317,26 @@ function detectLines(imageData, sensitivity, orientation) {
     start = -1;
   };
 
-  for (let axis = 2; axis < axisLength - 2; axis += 1) {
+  for (let axis = 1; axis < axisLength - 1; axis += 1) {
     if (candidates[axis]) {
       if (start < 0) start = axis;
     } else if (start >= 0) {
       finishLine(axis - 1);
     }
   }
-  finishLine(axisLength - 3);
+  finishLine(axisLength - 2);
 
-  return mergeNearbyLines(lines, axisLength);
+  return mergeNearbyLines(lines, axisLength, maxLineWidth);
 }
 
-function mergeNearbyLines(lines, axisLength) {
+function mergeNearbyLines(lines, axisLength, maxLineWidth) {
   if (lines.length < 2) return lines;
   const merged = [];
   const gapLimit = Math.max(2, Math.round(axisLength * 0.0015));
 
   lines.forEach((line) => {
     const previous = merged[merged.length - 1];
-    if (previous && line.start - previous.end - 1 <= gapLimit) {
+    if (previous && line.start - previous.end - 1 <= gapLimit && line.end - previous.start + 1 <= maxLineWidth) {
       previous.end = line.end;
       previous.width = previous.end - previous.start + 1;
     } else {
@@ -294,20 +348,25 @@ function mergeNearbyLines(lines, axisLength) {
 }
 
 function runDetection({ announce = true } = {}) {
-  if (!state.sourceImageData) return;
+  if (!state.workingImageData) return;
   const sensitivity = Number(elements.sensitivity.value);
+  const luma = imageLuminance(state.workingImageData);
   if (state.orientation === "both") {
     state.detections = [
-      ...detectLines(state.sourceImageData, sensitivity, "vertical"),
-      ...detectLines(state.sourceImageData, sensitivity, "horizontal"),
+      ...detectLines(state.workingImageData, sensitivity, "vertical", luma),
+      ...detectLines(state.workingImageData, sensitivity, "horizontal", luma),
     ];
   } else {
-    state.detections = detectLines(state.sourceImageData, sensitivity, state.orientation);
+    state.detections = detectLines(state.workingImageData, sensitivity, state.orientation, luma);
   }
   drawGuides();
   updateDetectionSummary();
   if (announce) {
-    setStatus(state.detections.length ? "Guides ready" : "No guides found", state.detections.length ? "success" : "neutral");
+    const mode = state.orientation === "both" ? "Both directions" : state.orientation;
+    const message = state.detections.length
+      ? `${mode}: ${state.detections.length} found`
+      : `${mode}: none found`;
+    setStatus(message.charAt(0).toUpperCase() + message.slice(1), state.detections.length ? "success" : "neutral");
   }
 }
 
@@ -357,6 +416,8 @@ function removeDetectedLines() {
   state.history.push({
     imageData: cloneImageData(state.workingImageData),
     detections: state.detections.map((line) => ({ ...line })),
+    orientation: state.orientation,
+    sensitivity: elements.sensitivity.value,
   });
 
   const cleaned = cloneImageData(state.workingImageData);
@@ -372,7 +433,7 @@ function removeDetectedLines() {
   state.workingImageData = cleaned;
   state.detections = [];
   renderWorkingImage();
-  updateDetectionSummary();
+  runDetection({ announce: false });
   if (removedCount === 1) {
     setStatus(`Removed 1 ${removedOrientation} line`, "success");
   } else {
@@ -385,6 +446,11 @@ function undoLastEdit() {
   if (!previous) return;
   state.workingImageData = previous.imageData;
   state.detections = previous.detections;
+  state.orientation = previous.orientation;
+  elements.sensitivity.value = previous.sensitivity;
+  elements.sensitivityValue.textContent = `${previous.sensitivity}%`;
+  updateActionLabels();
+  setGuidesVisible(true);
   renderWorkingImage();
   updateDetectionSummary();
   setStatus("Last edit undone", "success");
@@ -440,8 +506,6 @@ function loadImageFile(file) {
 
     elements.previewCanvas.width = width;
     elements.previewCanvas.height = height;
-    elements.guideCanvas.width = width;
-    elements.guideCanvas.height = height;
     previewContext.clearRect(0, 0, width, height);
     previewContext.drawImage(image, 0, 0, width, height);
 
@@ -482,11 +546,16 @@ function downloadImage() {
   }, "image/png");
 }
 
-function toggleGuides() {
-  state.guidesVisible = !state.guidesVisible;
+function setGuidesVisible(visible) {
+  state.guidesVisible = visible;
   elements.toggleGuidesButton.textContent = state.guidesVisible ? "Hide guides" : "Show guides";
   elements.toggleGuidesButton.setAttribute("aria-pressed", String(state.guidesVisible));
   drawGuides();
+  updateDetectionSummary();
+}
+
+function toggleGuides() {
+  setGuidesVisible(!state.guidesVisible);
 }
 
 elements.chooseButton.addEventListener("click", () => elements.fileInput.click());
@@ -494,10 +563,18 @@ elements.fileInput.addEventListener("change", (event) => {
   loadImageFile(event.target.files[0]);
   event.target.value = "";
 });
-elements.orientationButtons.forEach((button) => {
+elements.orientationInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    if (input.checked) setOrientation(input.value);
+  });
+});
+elements.legacyOrientationButtons.forEach((button) => {
   button.addEventListener("click", () => setOrientation(button.dataset.orientation));
 });
-elements.detectButton.addEventListener("click", () => runDetection());
+elements.detectButton.addEventListener("click", () => {
+  setGuidesVisible(true);
+  runDetection();
+});
 elements.removeButton.addEventListener("click", removeDetectedLines);
 elements.undoButton.addEventListener("click", undoLastEdit);
 elements.resetButton.addEventListener("click", resetImage);
@@ -506,7 +583,7 @@ elements.toggleGuidesButton.addEventListener("click", toggleGuides);
 
 elements.sensitivity.addEventListener("input", () => {
   elements.sensitivityValue.textContent = `${elements.sensitivity.value}%`;
-  if (state.sourceImageData) runDetection({ announce: false });
+  if (hasImage()) runDetection({ announce: false });
 });
 
 elements.dropzone.addEventListener("click", (event) => {
@@ -545,6 +622,12 @@ document.addEventListener("keydown", (event) => {
     undoLastEdit();
   }
 });
+
+if (typeof ResizeObserver !== "undefined") {
+  const guideResizeObserver = new ResizeObserver(drawGuides);
+  guideResizeObserver.observe(elements.previewCanvas);
+}
+window.addEventListener("resize", drawGuides);
 
 updateActionLabels();
 elements.sensitivityValue.textContent = `${elements.sensitivity.value}%`;

@@ -8,7 +8,7 @@
       content="Remove distracting vertical or horizontal lines from an image in your browser."
     />
     <title>LineLift — remove image lines</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=direction-fix-2" />
   </head>
   <body>
     <header class="topbar">
@@ -69,7 +69,7 @@
             </div>
             <div class="status-chip" id="statusChip">
               <span class="status-dot" aria-hidden="true"></span>
-              <span id="statusText">Waiting for an image</span>
+              <span id="statusText" role="status" aria-live="polite">Waiting for an image</span>
             </div>
           </div>
 
@@ -98,12 +98,16 @@
 
           <div class="canvas-footer">
             <div class="guide-summary">
-              <span class="legend-line" aria-hidden="true"></span>
-              <span id="guideSummary">Detected lines will appear as guides</span>
+              <span id="guideSummary" aria-live="polite">Detected lines will appear as guides</span>
             </div>
             <button class="text-button" id="toggleGuidesButton" type="button" disabled aria-pressed="true">
               Hide guides
             </button>
+          </div>
+          <div class="guide-legend" aria-label="Highlight colors">
+            <span><i class="legend-line legend-vertical" aria-hidden="true"></i>Vertical</span>
+            <span><i class="legend-line legend-horizontal" aria-hidden="true"></i>Horizontal</span>
+            <span>Highlights are not included in your download.</span>
           </div>
           <p class="notice notice-error hidden" id="errorNotice" role="alert"></p>
         </section>
@@ -120,20 +124,23 @@
           <div class="control-block">
             <div class="control-label-row">
               <span class="control-label">Line direction</span>
-              <span class="direction-hint">Choose what to find</span>
+              <span class="direction-hint" id="directionHint">Vertical selected</span>
             </div>
             <div class="segmented-control" role="group" aria-label="Line direction">
-              <button class="segment-button is-active" type="button" data-orientation="vertical" aria-pressed="true">
-                Vertical
-              </button>
-              <button class="segment-button" type="button" data-orientation="horizontal" aria-pressed="false">
-                Horizontal
-              </button>
-              <button class="segment-button" type="button" data-orientation="both" aria-pressed="false">
-                Both
-              </button>
+              <label class="direction-option">
+                <input type="radio" name="orientation" value="vertical" checked />
+                <span><span aria-hidden="true">↕</span> Vertical</span>
+              </label>
+              <label class="direction-option">
+                <input type="radio" name="orientation" value="horizontal" />
+                <span><span aria-hidden="true">↔</span> Horizontal</span>
+              </label>
+              <label class="direction-option">
+                <input type="radio" name="orientation" value="both" />
+                <span><span aria-hidden="true">✚</span> Both</span>
+              </label>
             </div>
-            <p class="helper-text">Choose the direction of the lines you want to detect and remove.</p>
+            <p class="helper-text">Changing direction updates the highlights automatically. Vertical runs up and down; horizontal runs left to right.</p>
           </div>
 
           <div class="control-block">
@@ -146,7 +153,7 @@
               <span>Precise</span>
               <span>Find more</span>
             </div>
-            <p class="helper-text">Raise sensitivity when a faint line is not highlighted. Lower it to reduce extra guides.</p>
+            <p class="helper-text">Raise sensitivity for faint lines. Best for straight lines across much of the image; review the highlights before removing.</p>
           </div>
 
           <div class="detection-card">
@@ -194,6 +201,6 @@
       </footer>
     </main>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=direction-fix-2"></script>
   </body>
 </html>
