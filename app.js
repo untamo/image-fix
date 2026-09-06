@@ -77,6 +77,8 @@ function updateControls() {
   elements.previewRepairButton.setAttribute("aria-pressed", String(state.previewRepair));
   elements.removeButton.disabled = !loaded || state.detections.length === 0;
   elements.downloadButton.disabled = !loaded;
+  elements.downloadButton.setAttribute("title", loaded && !state.repairedRows.length && state.detections.length
+    ? "Fix all detected lines and save PNG" : "Save PNG");
   elements.previousLineButton.disabled = !loaded || state.selectedLineIndex <= 0;
   elements.nextLineButton.disabled = !loaded || state.selectedLineIndex < 0
     || state.selectedLineIndex >= state.detections.length - 1;
@@ -187,7 +189,7 @@ function fitPreviewLayout(width, height, viewWidth, maxHeight, lines, selectedIn
   let top = Math.max(0, Math.min(mappedY(layout, 0), lens ? lens.top - 50 : Infinity));
   const bottom = Math.min(maxHeight, Math.max(mappedY(layout, height), lens ? lens.bottom + 50 : 0));
   // Keep the three action buttons reachable even for very shallow images.
-  top = Math.min(top, bottom - 196);
+  top = Math.min(top, bottom - 216);
   layout.offset -= top;
   layout.viewHeight = Math.max(1, bottom - top);
   return layout;
@@ -200,7 +202,7 @@ function renderPreview() {
   // Derive available height from the window, never the previously trimmed stage.
   // This keeps resizing and selection changes free of layout feedback loops.
   const controlHeight = elements.controlsPanel.getBoundingClientRect().height;
-  const maxHeight = Math.max(200, window.innerHeight - controlHeight - 18);
+  const maxHeight = Math.max(220, window.innerHeight - controlHeight - 18);
   const { width, height } = state.workingImageData;
   const layout = fitPreviewLayout(width, height, bounds.width, maxHeight,
     state.detections, state.selectedLineIndex);
@@ -509,8 +511,11 @@ function repairBounds(imageData, line) {
 }
 
 function planLineRepair(imageData, line) {
+  return planRepairRange(imageData, repairBounds(imageData, line));
+}
+
+function planRepairRange(imageData, { start, end }) {
   const { width, height, data } = imageData;
-  const { start, end } = repairBounds(imageData, line);
   const top = Math.max(0, start - 1);
   const bottom = Math.min(height - 1, end + 1);
   const pixels = new ImageData(width, end - start + 1);
@@ -535,9 +540,7 @@ function getRepairPlan() {
   return state.repairPlan;
 }
 
-function fixSelectedLine() {
-  const line = state.detections[state.selectedLineIndex];
-  if (!state.workingImageData || !line) return;
+function rememberEdit() {
   state.history.push({
     imageData: cloneImageData(state.workingImageData),
     detections: state.detections.map((candidate) => ({ ...candidate })),
@@ -545,6 +548,41 @@ function fixSelectedLine() {
     repairedRows: state.repairedRows.slice(),
     sensitivity: elements.sensitivity.value,
   });
+}
+
+// Save repairs the current set of hits once, at the chosen sensitivity.
+function fixAllDetectedLines() {
+  if (!state.workingImageData || !state.detections.length) return;
+  const source = state.workingImageData;
+  const ranges = state.detections.map((line) => repairBounds(source, line))
+    .sort((a, b) => a.start - b.start);
+  const merged = [];
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+    if (previous && range.start <= previous.end + 1) previous.end = Math.max(previous.end, range.end);
+    else merged.push({ ...range });
+  }
+  // Merge touching damage so a neighboring hit cannot become a reference row.
+  const cleaned = cloneImageData(source);
+  const repairedRows = new Set(state.repairedRows);
+  for (const range of merged) {
+    const plan = planRepairRange(source, range);
+    cleaned.data.set(plan.pixels.data, plan.start * cleaned.width * 4);
+    for (let row = plan.start; row <= plan.end; row += 1) repairedRows.add(row);
+  }
+  rememberEdit();
+  state.workingImageData = cleaned;
+  state.repairedRows = [...repairedRows];
+  state.previewRepair = false;
+  state.repairPlan = null;
+  renderWorkingImage();
+  runDetection({ announce: false });
+}
+
+function fixSelectedLine() {
+  const line = state.detections[state.selectedLineIndex];
+  if (!state.workingImageData || !line) return;
+  rememberEdit();
   const plan = getRepairPlan();
   const cleaned = cloneImageData(state.workingImageData);
   cleaned.data.set(plan.pixels.data, plan.start * cleaned.width * 4);
@@ -652,6 +690,7 @@ function loadImageFile(file) {
 
 function downloadImage() {
   if (!state.workingImageData) return;
+  if (!state.repairedRows.length) fixAllDetectedLines();
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = state.workingImageData.width;
   exportCanvas.height = state.workingImageData.height;

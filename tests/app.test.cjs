@@ -489,3 +489,56 @@ test("image area trims empty space before sensitivity for portrait and landscape
   assert.ok(shallow.viewHeight >= 196, "All three action buttons remain reachable");
   near(app.context.mappedY(shallow, 200), shallow.viewHeight);
 });
+
+test("first Save repairs every current hit, exports repaired pixels, and is one undoable edit", () => {
+  const app = harness();
+  app.load(multipleLines());
+  const original = app.state.workingImageData.data.slice();
+  app.nodes.get("previewRepairButton").click();
+  app.nodes.get("downloadButton").click();
+  assert.ok(cleanBackground(app.state.workingImageData));
+  assert.equal(app.state.detections.length, 0);
+  assert.equal(app.state.history.length, 1);
+  assert.equal(app.state.previewRepair, false);
+  assert.ok(cleanBackground(app.canvases.at(-1).context.calls[0].args[0]));
+  app.nodes.get("downloadButton").click();
+  assert.equal(app.state.history.length, 1, "Saving twice does not repair twice");
+  app.context.undoLastEdit();
+  assert.deepEqual(app.state.workingImageData.data, original);
+  assert.equal(app.state.repairedRows.length, 0);
+  app.nodes.get("downloadButton").click();
+  assert.ok(cleanBackground(app.state.workingImageData));
+});
+
+test("Save after a manual fix preserves remaining hits and exports only current edits", () => {
+  const app = harness();
+  app.load(multipleLines());
+  app.nodes.get("removeButton").click();
+  const edited = app.state.workingImageData.data.slice();
+  const remaining = app.state.detections.length;
+  assert.ok(remaining > 0);
+  app.nodes.get("previewRepairButton").click();
+  app.nodes.get("downloadButton").click();
+  assert.deepEqual(app.state.workingImageData.data, edited);
+  assert.deepEqual(app.canvases.at(-1).context.calls[0].args[0].data, edited);
+  assert.equal(app.state.detections.length, remaining);
+  assert.equal(app.state.history.length, 1);
+});
+
+test("automatic Save respects sensitivity and a no-hit Save leaves pixels and history untouched", () => {
+  const app = harness();
+  const source = multipleLines([45, 100], 1);
+  app.load(source);
+  app.nodes.get("sensitivity").value = "10";
+  app.nodes.get("sensitivity").fire("input");
+  assert.equal(app.state.detections.length, 1);
+  app.nodes.get("downloadButton").click();
+  const pixel = (row) => (row * source.width) * 4;
+  assert.equal(app.state.workingImageData.data[pixel(45)], 160);
+  assert.equal(app.state.workingImageData.data[pixel(100)], 151);
+  const clean = fixture("horizontal", 0);
+  app.load(clean);
+  app.nodes.get("downloadButton").click();
+  assert.equal(app.state.history.length, 0);
+  assert.deepEqual(app.canvases.at(-1).context.calls[0].args[0].data, clean.data);
+});
