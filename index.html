@@ -8,7 +8,7 @@
       content="Remove distracting horizontal lines from an image in your browser."
     />
     <title>LineLift — remove image lines</title>
-    <link rel="stylesheet" href="styles.css?v=pixel-fisheye-1" />
+    <link rel="stylesheet" href="styles.css?v=pixel-fisheye-2" />
   </head>
   <body>
     <header class="topbar">
@@ -94,12 +94,11 @@
               <canvas id="previewCanvas" aria-label="Fisheye image preview centered on one selected pixel row"></canvas>
               <canvas id="guideCanvas" aria-hidden="true"></canvas>
             </div>
+            <div class="focus-navigation hidden" id="focusNavigation" role="group" aria-label="Select a horizontal line">
+              <button class="button focus-arrow" id="previousLineButton" type="button" aria-label="Select previous line above" disabled>↑</button>
+              <button class="button focus-arrow" id="nextLineButton" type="button" aria-label="Select next line below" disabled>↓</button>
+            </div>
             <div class="editor-toolbar" id="editorToolbar" role="group" aria-label="Preview controls">
-              <div class="line-navigation" role="group" aria-label="Select a horizontal line">
-                <button class="button button-secondary" id="previousLineButton" type="button" aria-label="Select previous line above" disabled>↑ Up</button>
-                <span id="selectedLineStatus" role="status" aria-live="polite">No lines detected</span>
-                <button class="button button-secondary" id="nextLineButton" type="button" aria-label="Select next line below" disabled>↓ Down</button>
-              </div>
               <div class="panel-tools">
                 <button class="button button-secondary" id="moveControlsButton" type="button" aria-controls="controlsPanel">Move controls to top</button>
                 <button class="button button-secondary" id="toggleControlsButton" type="button" aria-controls="controlsPanel" aria-expanded="true">Hide controls</button>
@@ -152,12 +151,12 @@
 
           <div class="canvas-footer">
             <div class="guide-summary">
+              <span id="selectedLineStatus" role="status" aria-live="polite">No lines detected</span>
               <span id="guideSummary" aria-live="polite">Detected lines will appear as guides</span>
             </div>
           </div>
           <div class="guide-legend" aria-label="Highlight colors">
-            <span><i class="legend-line legend-selected" aria-hidden="true"></i>Selected · 1 pixel row</span>
-            <span><i class="legend-line legend-horizontal" aria-hidden="true"></i>Fisheye around the selected row</span>
+            <span><i class="legend-line legend-selected" aria-hidden="true"></i>Zoomed area · 10× center</span>
             <span>Preview fix shows the repair before applying it.</span>
           </div>
           <p class="notice notice-error hidden" id="errorNotice" role="alert"></p>
@@ -171,7 +170,7 @@
       </footer>
     </main>
 
-    <script src="app.js?v=pixel-fisheye-1"></script>
+    <script src="app.js?v=pixel-fisheye-2"></script>
   </body>
 </html>
 

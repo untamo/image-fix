@@ -26,13 +26,13 @@ function harness() {
     const listeners = new Map();
     const calls = [];
     const context = { calls };
-    for (const method of ["setTransform", "clearRect", "fillRect", "beginPath", "moveTo", "lineTo", "stroke", "putImageData", "drawImage"]) {
+    for (const method of ["setTransform", "clearRect", "fillRect", "beginPath", "moveTo", "lineTo", "stroke", "putImageData", "drawImage", "strokeRect"]) {
       context[method] = (...args) => calls.push({ method, args, lineWidth: context.lineWidth, fillStyle: context.fillStyle, strokeStyle: context.strokeStyle });
     }
     return {
       value: "", checked: false, textContent: "", disabled: false, dataset: {},
       attributes: {}, classList: { toggle() {}, add() {}, remove() {} },
-      width: 300, height: 150, context,
+      width: 300, height: 150, context, style: {},
       setAttribute(key, value) { this.attributes[key] = value; },
       getContext() { return context; },
       getBoundingClientRect() { return bounds; },
@@ -184,7 +184,7 @@ test("fisheye depends on source-row distance even with no nearby detections", ()
       const layout = app.context.buildFocusLayout(300, 200, width, height, lines, 0);
       for (let y = 0; y < 200; y += 1) {
         const actual = app.context.mappedY(layout, y + 1) - app.context.mappedY(layout, y);
-        near(actual, Math.abs(y - row) <= 4 ? 5 - Math.abs(y - row) : layout.scale);
+        near(actual, Math.abs(y - row) <= 4 ? 2 * (5 - Math.abs(y - row)) : layout.scale);
       }
       near(app.context.mappedY(layout, row + 0.5), height / 2);
       assert.equal(layout.segments[0].start, 0);
@@ -214,7 +214,7 @@ test("actual image rendering expands source bands and guides follow their mapped
   app.context.renderPreview();
   const draws = preview.context.calls.filter((call) => call.method === "drawImage");
   assert.ok(draws.length > 1);
-  assert.ok(draws.some((call) => Math.abs(call.args[8] / call.args[4] - 5) < 1e-7));
+  assert.ok(draws.some((call) => Math.abs(call.args[8] / call.args[4] - 10) < 1e-7));
   draws.forEach((call) => {
     assert.equal(call.args[0], app.canvases[0]);
     assert.ok(call.args[2] >= 0 && call.args[2] + call.args[4] <= 200 + 1e-7);
@@ -222,11 +222,27 @@ test("actual image rendering expands source bands and guides follow their mapped
   const guide = app.nodes.get("guideCanvas");
   guide.context.calls.length = 0;
   app.context.drawGuides();
-  const selectedMarker = guide.context.calls.find((call) => call.method === "fillRect" && call.fillStyle === "#c2f56d");
+  const outlines = guide.context.calls.filter((call) => call.method === "strokeRect");
+  assert.equal(outlines.length, 1);
+  assert.ok(!guide.context.calls.some((call) => ["fillRect", "stroke", "lineTo"].includes(call.method)),
+    "No fills or row guides may obscure pixels inside the zoomed area");
   const line = app.state.detections[app.state.selectedLineIndex];
-  near(selectedMarker.args[1] + 5, app.context.mappedY(app.state.previewLayout, line.start + 0.5));
-  near(app.context.mappedY(app.state.previewLayout, line.start + 1) - app.context.mappedY(app.state.previewLayout, line.start), 5);
-  assert.ok(!guide.context.calls.some((call) => call.method === "fillRect" && call.fillStyle === "rgba(194, 245, 109, 0.18)"));
+  const lens = app.context.focusBounds(app.state.previewLayout, line, 200);
+  near(outlines[0].args[1], lens.top - 0.5);
+  near(outlines[0].args[3], lens.bottom - lens.top + 1);
+  near(app.context.mappedY(app.state.previewLayout, line.start + 1) - app.context.mappedY(app.state.previewLayout, line.start), 10);
+  const up = app.nodes.get("previousLineButton");
+  const down = app.nodes.get("nextLineButton");
+  near(parseFloat(up.style.top) + 44, lens.top - 6);
+  near(parseFloat(down.style.top), lens.bottom + 6);
+  near(parseFloat(up.style.left), app.state.previewLayout.viewWidth / 2);
+  near(parseFloat(down.style.left), parseFloat(up.style.left));
+  app.bounds.width = 450;
+  app.bounds.height = 360;
+  app.resize();
+  const resizedLens = app.context.focusBounds(app.state.previewLayout, line, 200);
+  near(parseFloat(up.style.top) + 44, resizedLens.top - 6);
+  near(parseFloat(down.style.top), resizedLens.bottom + 6);
 });
 
 test("sensitivity preserves the closest selected line when earlier faint lines disappear", () => {

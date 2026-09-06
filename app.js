@@ -22,6 +22,7 @@ const elements = {
   canvasArea: document.querySelector("#canvasArea"),
   canvasStage: document.querySelector("#canvasStage"),
   editorToolbar: document.querySelector("#editorToolbar"),
+  focusNavigation: document.querySelector("#focusNavigation"),
   previousLineButton: document.querySelector("#previousLineButton"),
   nextLineButton: document.querySelector("#nextLineButton"),
   selectedLineStatus: document.querySelector("#selectedLineStatus"),
@@ -148,9 +149,9 @@ function buildFocusLayout(width, height, viewWidth, viewHeight, lines, selectedI
     const last = Math.min(height - 1, row + 4);
     append(first, scale);
     for (let y = first; y <= last; y += 1) {
-      const factor = 5 - Math.abs(y - row);
+      const factor = 2 * (5 - Math.abs(y - row));
       // The lens uses native-size pixels even if the overview is downscaled,
-      // so the selected one-pixel row remains five CSS pixels high on phones.
+      // so the selected one-pixel row remains ten CSS pixels high on phones.
       append(y + 1, factor, factor);
     }
   }
@@ -167,6 +168,15 @@ function mappedY(layout, sourceY) {
   return segment.top + (sourceY - segment.start) * segment.pixelsPerRow + layout.offset;
 }
 
+function focusBounds(layout, line, imageHeight) {
+  return {
+    left: (layout.viewWidth - layout.width) / 2,
+    top: mappedY(layout, Math.max(0, line.start - 4)),
+    bottom: mappedY(layout, Math.min(imageHeight, line.start + 5)),
+    width: layout.width,
+  };
+}
+
 function drawGuides() {
   const layout = state.previewLayout;
   if (!layout) return;
@@ -175,34 +185,21 @@ function drawGuides() {
   elements.guideCanvas.height = elements.previewCanvas.height;
   guideContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   guideContext.clearRect(0, 0, layout.viewWidth, layout.viewHeight);
-  const left = (layout.viewWidth - layout.width) / 2;
-  state.detections.forEach((line, index) => {
-    const center = mappedY(layout, line.start + line.width / 2);
-    if (center < 0 || center > layout.viewHeight) return;
-    const selected = index === state.selectedLineIndex;
-    const color = selected ? "#c2f56d" : "#67d3ff";
-    const bandHeight = mappedY(layout, line.end + 1) - mappedY(layout, line.start);
-    // Leave the selected pixel row untinted so its original/fixed colors can be compared.
-    if (!selected) {
-      guideContext.fillStyle = "rgba(103, 211, 255, 0.12)";
-      guideContext.fillRect(left, center - bandHeight / 2, layout.width, bandHeight);
-    }
-    // Outline the band rather than covering the pixels being inspected.
-    for (const edge of [center - bandHeight / 2, center + bandHeight / 2]) {
-      guideContext.beginPath();
-      guideContext.moveTo(left, edge);
-      guideContext.lineTo(left + layout.width, edge);
-      guideContext.strokeStyle = "rgba(5, 8, 12, 0.95)";
-      guideContext.lineWidth = 1;
-      guideContext.stroke();
-      guideContext.strokeStyle = color;
-      guideContext.lineWidth = 1;
-      guideContext.stroke();
-    }
-    guideContext.fillStyle = color;
-    guideContext.fillRect(left, center - 5, 6, 10);
-    guideContext.fillRect(left + layout.width - 6, center - 5, 6, 10);
-  });
+  const selected = state.detections[state.selectedLineIndex];
+  elements.focusNavigation.classList.toggle("hidden", !selected);
+  if (!selected) return;
+  const lens = focusBounds(layout, selected, state.workingImageData.height);
+  // Only the perimeter of the entire lens is marked. No image row is tinted,
+  // outlined, or crossed by a guide inside the area being inspected.
+  guideContext.strokeStyle = "#c2f56d";
+  guideContext.lineWidth = 1;
+  guideContext.strokeRect(lens.left + 0.5, lens.top - 0.5,
+    Math.max(0, lens.width - 1), lens.bottom - lens.top + 1);
+  elements.previousLineButton.style.top = `${lens.top - 50}px`;
+  elements.nextLineButton.style.top = `${lens.bottom + 6}px`;
+  const center = lens.left + lens.width / 2;
+  elements.previousLineButton.style.left = `${center}px`;
+  elements.nextLineButton.style.left = `${center}px`;
 }
 
 function renderPreview() {

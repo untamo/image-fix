@@ -4,13 +4,13 @@ LineLift is a browser-only image editor for detecting and removing distracting h
 
 ## Use it
 
-Open `index.html` in a modern browser and drop in an image. Horizontal lines are detected and highlighted automatically. When lines are found, one is always selected.
+Open `index.html` in a modern browser and drop in an image. Horizontal lines are detected automatically. When lines are found, one is always selected.
 
-Use **Up** and **Down** to cycle the detected pixel rows from top to bottom; the buttons wrap at either end. A selection is always **exactly one source pixel row high**, including when a detected stripe is several pixels thick.
+Use the **↑** and **↓** buttons directly above and below the outlined zoom area to cycle the detected pixel rows from top to bottom; the buttons wrap at either end. A selection is always **exactly one source pixel row high**, including when a detected stripe is several pixels thick.
 
-A vertical fisheye is centered on that single row. It enlarges the selected row to five display pixels, its immediately adjacent image rows to four, then three, two, and one. This profile follows distance in image pixels, regardless of where other lines were detected. Outside the lens the image returns to its normal overview scale. The full image width stays visible. The lens uses native pixel scale so the selected row stays inspectable even when a large image is scaled down on a phone.
+A vertical fisheye is centered on that single row. It enlarges the selected row to ten display pixels, its immediately adjacent image rows to eight, then six, four, and two. This profile follows distance in image pixels, regardless of where other lines were detected. Outside the lens the image returns to its normal overview scale. The full image width stays visible. The lens uses native pixel scale so the selected row stays inspectable even when a large image is scaled down on a phone.
 
-The selected row has a green outline and stays untinted; other candidate rows remain highlighted in blue. **Preview fix** temporarily shows the proposed repaired pixels in the fisheye. **Show original row** restores the original preview. Previewing does not change the image, history, or download.
+Only the outer perimeter of the zoomed area has a green outline. All image rows inside it remain free of highlights, fills, and guide strokes. **Preview fix** temporarily shows the proposed repaired pixels in the fisheye. **Show original row** restores the original preview. Previewing does not change the image, history, or download.
 
 The controls float over the preview on desktop and mobile. Adjust sensitivity to refresh detection; selection stays on the closest remaining line. Use **Hide controls** for more inspection space, or **Move controls to top/bottom**. Smaller screens can scroll within the panel.
 
@@ -18,7 +18,7 @@ Choose **Fix selected row** to apply the previewed repair to that one pixel row.
 
 **Download PNG** exports the cleaned image at its working dimensions, without magnification or highlights. Large input images are reduced to the existing processing limits (2,600 pixels per dimension and 12 megapixels). Processing stays local in the browser; no upload or server is required.
 
-Detection is designed for thin, straight light or dark horizontal stripes across a substantial part of the image, including multi-pixel bands. Vertical, short, curved, or diagonal marks are not supported. Review the highlights before removing; interpolation can soften detailed areas.
+Detection is designed for thin, straight light or dark horizontal stripes across a substantial part of the image, including multi-pixel bands. Vertical, short, curved, or diagonal marks are not supported. Preview the repair before applying it; interpolation can soften detailed areas.
 
 ## Checks
 
