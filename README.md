@@ -34,6 +34,12 @@ Run `node --check app.js` and `node --test tests/app.test.cjs` (Node.js 18+). Th
 
 Open https://untamo.github.io/image-fix/ in Chrome itself (use **Open in Chrome** if another app opened the link). In Chrome's three-dot menu, choose **Install and create shortcut → Install**; some versions call this **Add to Home screen → Install**. Confirm the browser's prompt. LineLift then opens from its own icon in a standalone window. The browser may also offer installation automatically; installation always needs your confirmation.
 
-After the first online load finishes caching, the app can reopen and process images offline. Only app files are cached; photos and unsaved edits remain in the current session. Save before closing. Updates download online and become active after all LineLift tabs and app windows are closed and reopened.
+After the first online load finishes caching, the app can reopen and process images offline. The offline cache contains only app files. Shared photos use a separate temporary local handoff and are deleted after the editor receives them; abandoned handoffs expire after five minutes and are cleared on the next app load or share. Unsaved edits remain in the current session. Save before closing. Updates download online and become active after all LineLift tabs and app windows are closed and reopened.
 
 The manifest and service worker are scoped to this repository's directory. For every release, bump `VERSION` and asset URLs in `sw.js` along with the matching URLs in `index.html`. Keep `sw.js` at its stable path. Run `node --test tests/*.test.cjs` to include offline caching and manifest checks.
+
+## Share a photo into LineLift
+
+In Android Gallery, Photos, or Files, select one image, tap **Share**, then choose **LineLift**. The image opens directly in the editor. This needs a browser installation that supports Web Share Target. Existing installations may need a manifest update before Android lists the new target; if it does not appear after updating, save your work and reinstall the app. If an Edge installation does not register the target, try installing through Chrome.
+
+The share request is intercepted locally by the service worker, including when offline; it is never forwarded to GitHub Pages. One image up to 20 MB is accepted. Each handoff has a unique identifier so separate shares cannot overwrite one another. Multiple files, non-images, expired handoffs, and storage failures show an error with the normal image picker available.
