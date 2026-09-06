@@ -29,3 +29,11 @@ Detection is designed for thin, straight light or dark horizontal stripes across
 ## Checks
 
 Run `node --check app.js` and `node --test tests/app.test.cjs` (Node.js 18+). The dependency-free tests cover horizontal-only detection and cleanup, zero/one/many selections, directional navigation boundaries, pixel-distance fisheye magnification and rendering, responsive highlight mapping, sensitivity changes, Undo, Reset, JPEG color-bleed repair, preservation outside the repair strip, repair preview/apply equivalence, and clean PNG export. They do not replace testing with real photographs in a browser.
+
+## Install on Android
+
+Open https://untamo.github.io/image-fix/ in Chrome itself (use **Open in Chrome** if another app opened the link). In Chrome's three-dot menu, choose **Install and create shortcut → Install**; some versions call this **Add to Home screen → Install**. Confirm the browser's prompt. LineLift then opens from its own icon in a standalone window. The browser may also offer installation automatically; installation always needs your confirmation.
+
+After the first online load finishes caching, the app can reopen and process images offline. Only app files are cached; photos and unsaved edits remain in the current session. Save before closing. Updates download online and become active after all LineLift tabs and app windows are closed and reopened.
+
+The manifest and service worker are scoped to this repository's directory. For every release, bump `VERSION` and asset URLs in `sw.js` along with the matching URLs in `index.html`. Keep `sw.js` at its stable path. Run `node --test tests/*.test.cjs` to include offline caching and manifest checks.
