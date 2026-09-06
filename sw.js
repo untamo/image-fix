@@ -1,19 +1,19 @@
-importScripts("./share-store.js?v=share-target-1");
+importScripts("./share-store.js?v=bunny-icon-1");
 
 // Bump VERSION and the asset URLs whenever releasing an app update.
-const VERSION = "share-target-1";
+const VERSION = "bunny-icon-1";
 const CACHE_PREFIX = `linelift:${self.registration.scope}:`;
 const CACHE_NAME = `${CACHE_PREFIX}${VERSION}`;
 const APP_URL = new URL("./index.html", self.registration.scope).href;
 const ASSETS = [
   "./index.html",
-  "./app.js?v=share-target-1",
-  "./styles.css?v=share-target-1",
-  "./pwa.js?v=share-target-1",
-  "./share-store.js?v=share-target-1",
+  "./app.js?v=bunny-icon-1",
+  "./styles.css?v=bunny-icon-1",
+  "./pwa.js?v=bunny-icon-1",
+  "./share-store.js?v=bunny-icon-1",
   "./manifest.webmanifest",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
+  "./icons/bunny-192.png",
+  "./icons/bunny-512.png",
 ].map((path) => new URL(path, self.registration.scope).href);
 
 self.addEventListener("install", (event) => {
