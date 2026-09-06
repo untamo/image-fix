@@ -4,7 +4,7 @@ LineLift is a browser-only image editor for detecting and removing distracting h
 
 ## Use it
 
-Open `index.html` in a modern browser and drop in an image. Horizontal lines are detected automatically. When lines are found, one is always selected.
+Open `index.html` in a modern browser. The opening screen has one image-loading target: choose an image or drop it there. Horizontal lines are detected automatically. When lines are found, one is always selected.
 
 Use the **↑** and **↓** buttons directly above and below the outlined zoom area to cycle detected lines from top to bottom; each arrow is enabled only when another line exists in that direction, and navigation stops at either end. Each stripe has **one selection**, even when its defect or color bleed spans several pixel rows. Its strongest damaged row is used as the **one-pixel-high focus**; ties favor the center. Navigation is disabled when there is only one line.
 
@@ -14,7 +14,7 @@ Only the outer perimeter of the zoomed area has a green outline. All image rows 
 
 Once an image is loaded, the action buttons appear as a single icon column on the right of the image: **Preview** (eye), **Fix** (wand), and **Save** (download). Preview has a highlighted active state and toggles between the proposed repair and original pixels. Save downloads the cleaned PNG. Buttons have accessible names and tooltips.
 
-The **↑ / ↓** navigation arrows remain immediately above and below the zoom outline, and sensitivity remains in a compact slider directly below the rendered image or its navigation arrow, without a large gap. The loaded-image view hides the app header and filename panel and removes the bottom information panels. Counts are not displayed. Adjusting sensitivity refreshes detection while retaining the nearest remaining line.
+The **↑ / ↓** navigation arrows remain immediately above and below the zoom outline, and sensitivity occupies the bottom row of the same image component, below the image viewport in normal layout flow. It never overlays image pixels. The background is solid, without a striped pattern. There are no branding, filename, or bottom information panels. Counts are not displayed. Adjusting sensitivity refreshes detection while retaining the nearest remaining line.
 
 Choose **Fix** to repair the selected stripe, including any detected color bleed around it. The selection remains exactly one pixel row; the repair can cover several rows when the defect extends beyond its center. The repair range remains available to screen readers without a visible information panel. Clean reference rows are chosen outside that range, and only pixels within the reported strip are changed. This prevents JPEG halos from being copied into the repair.
 

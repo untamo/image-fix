@@ -15,8 +15,6 @@ const state = {
 };
 
 const elements = {
-  appHeader: document.querySelector("#appHeader"),
-  workspaceHeader: document.querySelector("#workspaceHeader"),
   fileInput: document.querySelector("#fileInput"),
   chooseButton: document.querySelector("#chooseButton"),
   dropzone: document.querySelector("#dropzone"),
@@ -31,8 +29,6 @@ const elements = {
   controlsPanel: document.querySelector("#controlsPanel"),
   previewCanvas: document.querySelector("#previewCanvas"),
   guideCanvas: document.querySelector("#guideCanvas"),
-  workspaceHeading: document.querySelector("#workspaceHeading"),
-  statusChip: document.querySelector("#statusChip"),
   statusText: document.querySelector("#statusText"),
   guideSummary: document.querySelector("#guideSummary"),
   errorNotice: document.querySelector("#errorNotice"),
@@ -57,9 +53,8 @@ function cloneImageData(imageData) {
   return copy;
 }
 
-function setStatus(message, tone = "neutral") {
+function setStatus(message) {
   elements.statusText.textContent = message;
-  elements.statusChip.dataset.tone = tone;
 }
 
 function setError(message = "") {
@@ -77,8 +72,6 @@ function hasImage() {
 function updateControls() {
   const loaded = hasImage();
   elements.editorShell.classList.toggle("is-editing", loaded);
-  elements.appHeader.classList.toggle("hidden", loaded);
-  elements.workspaceHeader.classList.toggle("hidden", loaded);
   elements.previewRepairButton.disabled = !loaded || state.selectedLineIndex < 0;
   elements.previewRepairButton.setAttribute("title", state.previewRepair ? "Preview: showing repair — click to show original" : "Preview repair");
   elements.previewRepairButton.setAttribute("aria-pressed", String(state.previewRepair));
@@ -190,19 +183,10 @@ function renderPreview() {
   if (!state.workingImageData) return;
   const bounds = elements.canvasStage.getBoundingClientRect();
   if (!bounds.width || !bounds.height) return;
-  // Position the focus independently of the dock's top so bringing the slider
-  // to the actual image edge cannot trigger a layout feedback loop.
-  const dockHeight = elements.controlsPanel.getBoundingClientRect().height || 72;
-  const maxDockTop = Math.max(0, bounds.height - dockHeight - 8);
-  const focusY = Math.max(75, (maxDockTop - 8) / 2);
+  // The stage measures only the image; sensitivity has its own row below it.
   const { width, height } = state.workingImageData;
   const layout = buildFocusLayout(width, height, bounds.width, bounds.height,
-    state.detections, state.selectedLineIndex, focusY);
-  const imageBottom = mappedY(layout, height);
-  const selected = state.detections[state.selectedLineIndex];
-  const navigationBottom = selected ? focusBounds(layout, selected, height).bottom + 56 : 0;
-  const dockTop = Math.min(maxDockTop, Math.max(8, imageBottom + 6, navigationBottom));
-  elements.controlsPanel.style.top = `${dockTop}px`;
+    state.detections, state.selectedLineIndex);
   state.previewLayout = layout;
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
   elements.previewCanvas.width = Math.round(bounds.width * pixelRatio);
@@ -589,7 +573,6 @@ function resetImage() {
 
 function setLoadedState(file, width, height) {
   state.fileBaseName = file.name.replace(/\.[^/.]+$/, "") || "cleaned-image";
-  elements.workspaceHeading.textContent = file.name;
   elements.canvasArea.classList.remove("hidden");
   elements.dropzone.classList.add("hidden");
   setStatus(`Loaded ${width} × ${height}`, "success");
@@ -687,18 +670,6 @@ elements.sensitivity.addEventListener("input", () => {
   }
 });
 
-elements.dropzone.addEventListener("click", (event) => {
-  if (event.target.closest("button")) return;
-  elements.fileInput.click();
-});
-
-elements.dropzone.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    elements.fileInput.click();
-  }
-});
-
 ["dragenter", "dragover"].forEach((eventName) => {
   elements.dropzone.addEventListener(eventName, (event) => {
     event.preventDefault();
@@ -727,7 +698,6 @@ document.addEventListener("keydown", (event) => {
 if (typeof ResizeObserver !== "undefined") {
   const guideResizeObserver = new ResizeObserver(renderPreview);
   guideResizeObserver.observe(elements.canvasStage);
-  guideResizeObserver.observe(elements.controlsPanel);
 }
 window.addEventListener("resize", renderPreview);
 

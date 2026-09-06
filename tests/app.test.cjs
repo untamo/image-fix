@@ -293,16 +293,16 @@ test("resizing redraws display pixels and keeps selected image bands centered in
   assert.equal(app.nodes.get("previewCanvas").width, 900);
   assert.equal(app.nodes.get("guideCanvas").height, 600);
   const line = app.state.detections[app.state.selectedLineIndex];
-  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), 244 / 2);
+  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), app.bounds.height / 2);
   assert.ok(app.nodes.get("previousLineButton"));
   assert.ok(app.nodes.get("nextLineButton"));
   app.load(fixture("horizontal", 1, 20, 1800, 200));
-  const dockTop = parseFloat(app.nodes.get("controlsPanel").style.top);
-  const imageBottom = app.context.mappedY(app.state.previewLayout, 200);
-  const arrowBottom = parseFloat(app.nodes.get("nextLineButton").style.top) + 44;
-  assert.ok(dockTop >= imageBottom + 6);
-  assert.ok(dockTop >= arrowBottom + 6);
-  assert.ok(dockTop < app.bounds.height - 48, "Slider moves up from the viewport bottom toward the image");
+  const lineCenter = app.context.mappedY(app.state.previewLayout,
+    app.state.detections[app.state.selectedLineIndex].start + 0.5);
+  near(lineCenter, app.bounds.height / 2);
+  assert.ok(parseFloat(app.nodes.get("previousLineButton").style.top) >= 0);
+  assert.ok(parseFloat(app.nodes.get("nextLineButton").style.top) + 44 <= app.bounds.height);
+
 });
 
 test("export contains original-size image pixels without highlights or magnification", () => {
