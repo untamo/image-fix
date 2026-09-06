@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Remove distracting vertical or horizontal lines from an image in your browser."
+      content="Remove distracting horizontal lines from an image in your browser."
     />
     <title>LineLift — remove image lines</title>
-    <link rel="stylesheet" href="styles.css?v=overlay-controls-1" />
+    <link rel="stylesheet" href="styles.css?v=horizontal-focus-1" />
   </head>
   <body>
     <header class="topbar">
@@ -45,9 +45,9 @@
       <section class="page-intro" aria-labelledby="pageTitle">
         <div>
           <p class="eyebrow">Image workspace</p>
-          <h1 id="pageTitle">Clean up distracting lines.</h1>
+          <h1 id="pageTitle">Clean up horizontal lines.</h1>
           <p class="intro-copy">
-            Drop in an image, review the detected guides, and remove distracting lines with a single click.
+            Drop in an image, inspect each horizontal line, and remove the detected lines.
           </p>
         </div>
         <div class="privacy-note">
@@ -91,12 +91,19 @@
 
           <div class="canvas-area hidden" id="canvasArea">
             <div class="canvas-stage" id="canvasStage">
-              <canvas id="previewCanvas" aria-label="Image preview"></canvas>
+              <canvas id="previewCanvas" aria-label="Horizontal line inspection preview with graduated vertical magnification"></canvas>
               <canvas id="guideCanvas" aria-hidden="true"></canvas>
             </div>
-            <div class="editor-toolbar" role="group" aria-label="Preview controls">
-              <button class="button button-secondary" id="moveControlsButton" type="button" aria-controls="controlsPanel">Move controls to top</button>
-              <button class="button button-secondary" id="toggleControlsButton" type="button" aria-controls="controlsPanel" aria-expanded="true">Hide controls</button>
+            <div class="editor-toolbar" id="editorToolbar" role="group" aria-label="Preview controls">
+              <div class="line-navigation" role="group" aria-label="Select a horizontal line">
+                <button class="button button-secondary" id="previousLineButton" type="button" aria-label="Select previous line above" disabled>↑ Up</button>
+                <span id="selectedLineStatus" role="status" aria-live="polite">No lines detected</span>
+                <button class="button button-secondary" id="nextLineButton" type="button" aria-label="Select next line below" disabled>↓ Down</button>
+              </div>
+              <div class="panel-tools">
+                <button class="button button-secondary" id="moveControlsButton" type="button" aria-controls="controlsPanel">Move controls to top</button>
+                <button class="button button-secondary" id="toggleControlsButton" type="button" aria-controls="controlsPanel" aria-expanded="true">Hide controls</button>
+              </div>
             </div>
             <aside class="panel controls-panel" id="controlsPanel" aria-labelledby="controlsHeading" data-position="bottom">
               <div class="panel-heading compact">
@@ -105,28 +112,6 @@
                   <h2 id="controlsHeading">Line removal</h2>
                 </div>
                 <span class="control-badge">Auto</span>
-              </div>
-
-              <div class="control-block">
-                <div class="control-label-row">
-                  <span class="control-label">Line direction</span>
-                  <span class="direction-hint" id="directionHint">Vertical selected</span>
-                </div>
-                <div class="segmented-control" role="group" aria-label="Line direction">
-                  <label class="direction-option">
-                    <input type="radio" name="orientation" value="vertical" checked />
-                    <span><span aria-hidden="true">↕</span> Vertical</span>
-                  </label>
-                  <label class="direction-option">
-                    <input type="radio" name="orientation" value="horizontal" />
-                    <span><span aria-hidden="true">↔</span> Horizontal</span>
-                  </label>
-                  <label class="direction-option">
-                    <input type="radio" name="orientation" value="both" />
-                    <span><span aria-hidden="true">✚</span> Both</span>
-                  </label>
-                </div>
-                <p class="helper-text">Direction and sensitivity update the guides as you adjust.</p>
               </div>
 
               <div class="control-block">
@@ -158,13 +143,13 @@
                     <path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                     <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8" />
                   </svg>
-                  <span id="detectButtonLabel">Detect vertical lines</span>
+                  <span id="detectButtonLabel">Detect horizontal lines</span>
                 </button>
                 <button class="button button-primary button-wide" id="removeButton" type="button" disabled>
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                   </svg>
-                  <span id="removeButtonLabel">Remove detected lines</span>
+                  <span id="removeButtonLabel">Remove horizontal lines</span>
                 </button>
               </div>
 
@@ -175,14 +160,11 @@
             <div class="guide-summary">
               <span id="guideSummary" aria-live="polite">Detected lines will appear as guides</span>
             </div>
-            <button class="text-button" id="toggleGuidesButton" type="button" disabled aria-pressed="true">
-              Hide guides
-            </button>
           </div>
           <div class="guide-legend" aria-label="Highlight colors">
-            <span><i class="legend-line legend-vertical" aria-hidden="true"></i>Vertical</span>
-            <span><i class="legend-line legend-horizontal" aria-hidden="true"></i>Horizontal</span>
-            <span>Highlights are not included in your download.</span>
+            <span><i class="legend-line legend-selected" aria-hidden="true"></i>Selected · 5×</span>
+            <span><i class="legend-line legend-horizontal" aria-hidden="true"></i>Nearby lines · 4×, 3×, 2×, 1×</span>
+            <span>Magnification and highlights are preview only.</span>
           </div>
           <p class="notice notice-error hidden" id="errorNotice" role="alert"></p>
         </section>
@@ -195,7 +177,7 @@
       </footer>
     </main>
 
-    <script src="app.js?v=overlay-controls-1"></script>
+    <script src="app.js?v=horizontal-focus-1"></script>
   </body>
 </html>
 

@@ -26,8 +26,8 @@ function harness() {
     const listeners = new Map();
     const calls = [];
     const context = { calls };
-    for (const method of ["setTransform", "clearRect", "fillRect", "beginPath", "moveTo", "lineTo", "stroke", "putImageData"]) {
-      context[method] = (...args) => calls.push({ method, args, lineWidth: context.lineWidth });
+    for (const method of ["setTransform", "clearRect", "fillRect", "beginPath", "moveTo", "lineTo", "stroke", "putImageData", "drawImage"]) {
+      context[method] = (...args) => calls.push({ method, args, lineWidth: context.lineWidth, fillStyle: context.fillStyle });
     }
     return {
       value: "", checked: false, textContent: "", disabled: false, dataset: {},
@@ -43,9 +43,10 @@ function harness() {
     };
   }
   for (const [, id] of html.matchAll(/\bid="([^"]+)"/g)) nodes.set(id, node());
+  nodes.get("editorToolbar").getBoundingClientRect = () => ({ top: 0, bottom: 20 });
+  nodes.get("controlsPanel").getBoundingClientRect = () => ({ top: bounds.height - 40, bottom: bounds.height });
+  bounds.top = 0;
   nodes.get("sensitivity").value = "60";
-  const inputs = [...html.matchAll(/<input type="radio" name="orientation" value="([^"]+)"/g)]
-    .map(([, value]) => Object.assign(node(), { value }));
   const context = vm.createContext({
     ImageData: ImageDataStub,
     window: { devicePixelRatio: 2, addEventListener() {}, setTimeout() {} },
@@ -53,25 +54,23 @@ function harness() {
     URL: { createObjectURL() { return "blob:local-test"; }, revokeObjectURL() {} },
     document: {
       querySelector(selector) { return nodes.get(selector.slice(1)) || null; },
-      querySelectorAll(selector) { return selector.includes('input[name="orientation"]') ? inputs : []; },
+
       addEventListener() {},
       createElement(tag) { const element = node(); if (tag === "canvas") canvases.push(element); return element; },
     },
   });
   vm.runInContext(`${source}\nthis.testState = state;`, context);
   return {
-    context, state: context.testState, nodes, inputs, bounds, canvases,
+    context, state: context.testState, nodes, bounds, canvases,
     resize() { resizeCallback(); },
     load(image) {
       context.testState.sourceImageData = context.cloneImageData(image);
       context.testState.workingImageData = context.cloneImageData(image);
       context.testState.history = [];
+      context.testState.detections = [];
+      context.testState.selectedLineIndex = -1;
       context.renderWorkingImage();
       context.runDetection();
-    },
-    select(value) {
-      inputs.forEach((input) => { input.checked = input.value === value; });
-      inputs.find((input) => input.value === value).fire("change");
     },
   };
 }
@@ -95,155 +94,214 @@ function cleanBackground(image) {
   return image.data.every((value, index) => value === (index % 4 === 3 ? 255 : 160));
 }
 
-test("native direction selection updates labels, checked state, and detections", () => {
+function multipleLines(positions = [20, 45, 70, 95, 120, 145, 170], faint = -1) {
+  const image = fixture("horizontal", 0);
+  positions.forEach((y, index) => {
+    for (let row = y; row < y + 2; row += 1) {
+      for (let x = 0; x < image.width; x += 1) {
+        const pixel = (row * image.width + x) * 4;
+        image.data.fill(index === faint ? 151 : 20, pixel, pixel + 3);
+      }
+    }
+  });
+  return image;
+}
+
+function near(actual, expected, message = "") {
+  assert.ok(Math.abs(actual - expected) < 1e-7, `${message}: ${actual} != ${expected}`);
+}
+
+test("empty and single-line images have valid selection and safe navigation", () => {
   const app = harness();
-  app.select("horizontal");
-  assert.equal(app.state.orientation, "horizontal");
-  assert.equal(app.nodes.get("detectButtonLabel").textContent, "Detect horizontal lines");
-  assert.equal(app.nodes.get("directionHint").textContent, "Horizontal selected");
+  assert.equal(app.state.selectedLineIndex, -1);
+  assert.ok(app.nodes.get("previousLineButton").disabled);
+  app.context.cycleSelectedLine(1);
   app.load(fixture("horizontal"));
-  assert.equal(app.state.detections.length, 1);
-  assert.match(app.nodes.get("statusText").textContent, /Horizontal: 1 found/);
-  app.select("vertical");
-  assert.equal(app.state.detections.length, 0);
-  app.select("horizontal");
-  assert.equal(app.state.detections[0].orientation, "horizontal");
-  assert.equal(app.inputs.filter((input) => input.checked).length, 1);
+  assert.equal(app.state.selectedLineIndex, 0);
+  assert.equal(app.nodes.get("selectedLineStatus").textContent, "Line 1 / 1 · 5×");
+  assert.ok(app.nodes.get("nextLineButton").disabled);
+  app.context.cycleSelectedLine(-1);
+  assert.equal(app.state.selectedLineIndex, 0);
+  app.load(fixture("horizontal", 0));
+  assert.equal(app.state.selectedLineIndex, -1);
+  assert.equal(app.nodes.get("selectedLineStatus").textContent, "No lines detected");
+  assert.ok(app.nodes.get("removeButton").disabled);
 });
 
-test("detects and removes thin and thick light/dark lines in both axes", () => {
+test("Up and Down wrap through lines in image order without editing pixels", () => {
   const app = harness();
-  for (const orientation of ["vertical", "horizontal"]) {
-    for (const thickness of [1, 3, 8]) {
-      for (const ink of [20, 240]) {
-        const image = fixture(orientation, thickness, ink);
-        const detections = app.context.detectLines(image, 60, orientation);
-        assert.equal(detections.length, 1, `${orientation}/${thickness}/${ink}`);
-        assert.equal(detections[0].width, thickness);
-        assert.equal(detections[0].start, orientation === "vertical" ? 70 : 90);
-        app.context.interpolateDetectedLine(image.data, image.width, image.height, detections[0]);
-        assert.ok(cleanBackground(image), `${orientation}/${thickness}/${ink} cleanup`);
-      }
+  app.load(multipleLines());
+  const original = app.state.workingImageData.data.slice();
+  assert.equal(app.state.detections.length, 7);
+  assert.equal(app.state.selectedLineIndex, 0);
+  app.nodes.get("previousLineButton").click();
+  assert.equal(app.state.selectedLineIndex, 6);
+  app.nodes.get("nextLineButton").click();
+  assert.equal(app.state.selectedLineIndex, 0);
+  for (let i = 1; i < 7; i += 1) {
+    app.nodes.get("nextLineButton").click();
+    assert.equal(app.state.selectedLineIndex, i);
+  }
+  assert.equal(app.state.history.length, 0);
+  assert.deepEqual(app.state.workingImageData.data, original);
+});
+
+test("horizontal-only detection and cleanup leave vertical lines untouched", () => {
+  const app = harness();
+  app.load(fixture("vertical"));
+  assert.equal(app.state.detections.length, 0);
+  app.load(fixture("both"));
+  assert.equal(app.state.detections.length, 1);
+  assert.equal(app.state.detections[0].start, 90);
+  app.nodes.get("removeButton").click();
+  assert.deepEqual(app.state.workingImageData.data, fixture("vertical").data);
+});
+
+test("detects and removes thin/thick light and dark horizontal lines", () => {
+  const app = harness();
+  for (const thickness of [1, 3, 8]) {
+    for (const ink of [20, 240]) {
+      const image = fixture("horizontal", thickness, ink);
+      const lines = app.context.detectLines(image, 60);
+      assert.equal(lines.length, 1, `${thickness}/${ink}`);
+      assert.equal(lines[0].width, thickness);
+      app.context.interpolateDetectedLine(image.data, image.width, image.height, lines[0]);
+      assert.ok(cleanBackground(image));
     }
   }
 });
 
-test("Both detects and removes crossing lines without changing the original", () => {
+test("magnification is exactly 5,4,3,2,1 times baseline with continuous bands", () => {
   const app = harness();
-  app.load(fixture("both", 8));
-  const original = app.state.sourceImageData.data.slice();
-  app.select("both");
-  assert.equal(app.state.detections.length, 2);
-  app.nodes.get("removeButton").click();
-  assert.ok(cleanBackground(app.state.workingImageData));
-  assert.deepEqual(app.state.sourceImageData.data, original);
+  const lines = Array.from({ length: 11 }, (_, index) => ({ start: index * 18, end: index * 18 + 2, width: 3 }));
+  for (const [width, height] of [[300, 200], [150, 100], [900, 600]]) {
+    for (const selected of [0, 5, 10]) {
+      const layout = app.context.buildFocusLayout(300, 200, width, height, lines, selected);
+      lines.forEach((line, index) => {
+        const actual = app.context.mappedY(layout, line.end + 1) - app.context.mappedY(layout, line.start);
+        near(actual / (line.width * layout.scale), Math.max(1, 5 - Math.abs(index - selected)));
+      });
+      near(app.context.mappedY(layout, lines[selected].start + 1.5), height / 2);
+      assert.equal(layout.segments[0].start, 0);
+      assert.equal(layout.segments.at(-1).end, 200);
+      layout.segments.forEach((part, index) => {
+        assert.ok(part.end > part.start);
+        if (index) {
+          near(layout.segments[index - 1].end, part.start);
+          near(layout.segments[index - 1].bottom, part.top);
+        }
+      });
+    }
+  }
 });
 
-test("switching directions scans the edited image, not removed lines in the original", () => {
+test("actual image rendering expands source bands and guides follow their mapped edges", () => {
   const app = harness();
-  app.load(fixture("both"));
-  app.nodes.get("removeButton").click();
-  app.select("both");
-  assert.equal(app.state.detections.length, 1);
-  assert.equal(app.state.detections[0].orientation, "horizontal");
-  app.select("horizontal");
-  app.nodes.get("removeButton").click();
-  app.select("both");
-  assert.equal(app.state.detections.length, 0);
-  assert.ok(cleanBackground(app.state.workingImageData));
-});
-
-test("Undo restores matching direction, sensitivity, pixels, and guides", () => {
-  const app = harness();
-  app.select("horizontal");
-  app.load(fixture("horizontal", 8));
-  const original = app.state.workingImageData.data.slice();
-  app.nodes.get("removeButton").click();
-  app.select("vertical");
-  app.nodes.get("sensitivity").value = "95";
-  app.nodes.get("undoButton").click();
-  assert.equal(app.state.orientation, "horizontal");
-  assert.equal(app.nodes.get("sensitivity").value, "60");
-  assert.equal(app.inputs.find((input) => input.value === "horizontal").checked, true);
-  assert.deepEqual(app.state.workingImageData.data, original);
-  assert.equal(app.state.detections[0].orientation, "horizontal");
-  app.nodes.get("resetButton").click();
-  assert.deepEqual(app.state.workingImageData.data, original);
-  assert.equal(app.state.history.length, 0);
-});
-
-test("horizontal guides span left to right with 3px cores, even after resizing", () => {
-  const app = harness();
-  app.select("horizontal");
-  app.load(fixture("horizontal", 1, 20, 2600, 1800));
+  app.load(multipleLines());
+  app.nodes.get("nextLineButton").click();
+  const preview = app.nodes.get("previewCanvas");
+  preview.context.calls.length = 0;
+  app.context.renderPreview();
+  const draws = preview.context.calls.filter((call) => call.method === "drawImage");
+  assert.ok(draws.length > 1);
+  assert.ok(draws.some((call) => Math.abs(call.args[8] / call.args[4] - 5 * app.state.previewLayout.scale) < 1e-7));
+  draws.forEach((call) => {
+    assert.equal(call.args[0], app.canvases[0]);
+    assert.ok(call.args[2] >= 0 && call.args[2] + call.args[4] <= 200 + 1e-7);
+  });
   const guide = app.nodes.get("guideCanvas");
   guide.context.calls.length = 0;
   app.context.drawGuides();
-  assert.equal(guide.width, 600);
-  assert.equal(guide.height, 400);
-  const moves = guide.context.calls.filter((call) => call.method === "moveTo");
-  const ends = guide.context.calls.filter((call) => call.method === "lineTo");
-  assert.equal(moves[0].args[0], 0);
-  assert.equal(ends[0].args[0], 300);
-  assert.equal(moves[0].args[1], ends[0].args[1]);
-  assert.deepEqual(guide.context.calls.filter((call) => call.method === "stroke").map((call) => call.lineWidth), [6, 3]);
+  const selectedFill = guide.context.calls.find((call) => call.method === "fillRect" && call.fillStyle === "rgba(194, 245, 109, 0.18)");
+  const line = app.state.detections[app.state.selectedLineIndex];
+  near(selectedFill.args[1], app.context.mappedY(app.state.previewLayout, line.start));
+  near(selectedFill.args[3], 5 * line.width * app.state.previewLayout.scale);
+});
+
+test("sensitivity preserves the closest selected line when earlier faint lines disappear", () => {
+  const app = harness();
+  app.nodes.get("sensitivity").value = "95";
+  app.load(multipleLines([20, 70, 120], 0));
+  assert.equal(app.state.detections.length, 3);
+  app.nodes.get("nextLineButton").click();
+  assert.equal(app.state.detections[app.state.selectedLineIndex].start, 70);
+  app.nodes.get("sensitivity").value = "10";
+  app.nodes.get("sensitivity").fire("input");
+  assert.equal(app.state.detections.length, 2);
+  assert.equal(app.state.selectedLineIndex, 0);
+  assert.equal(app.state.detections[0].start, 70);
+});
+
+test("Undo restores pixels, sensitivity, selection and magnification; Reset restores source", () => {
+  const app = harness();
+  app.load(multipleLines());
+  const original = app.state.workingImageData.data.slice();
+  app.nodes.get("nextLineButton").click();
+  app.nodes.get("removeButton").click();
+  assert.ok(cleanBackground(app.state.workingImageData));
+  assert.equal(app.state.selectedLineIndex, -1);
+  app.nodes.get("sensitivity").value = "95";
+  app.nodes.get("undoButton").click();
+  assert.equal(app.state.selectedLineIndex, 1);
+  assert.equal(app.nodes.get("sensitivity").value, "60");
+  assert.deepEqual(app.state.workingImageData.data, original);
+  app.nodes.get("removeButton").click();
+  app.nodes.get("resetButton").click();
+  assert.deepEqual(app.state.workingImageData.data, original);
+  assert.equal(app.state.history.length, 0);
+  assert.ok(app.state.selectedLineIndex >= 0);
+});
+
+test("resizing redraws display pixels and keeps selected image bands centered in clear space", () => {
+  const app = harness();
+  app.load(multipleLines());
   app.bounds.width = 450;
   app.bounds.height = 300;
   app.resize();
-  assert.equal(guide.width, 900);
-  assert.equal(guide.height, 600);
+  assert.equal(app.nodes.get("previewCanvas").width, 900);
+  assert.equal(app.nodes.get("guideCanvas").height, 600);
+  const line = app.state.detections[app.state.selectedLineIndex];
+  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), (28 + 252) / 2);
+  app.nodes.get("toggleControlsButton").click();
+  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), (28 + 300) / 2);
 });
 
-test("changing direction reveals hidden guides and updates the legend summary", () => {
+test("export contains original-size image pixels without highlights or magnification", () => {
   const app = harness();
-  app.load(fixture("both"));
-  app.nodes.get("toggleGuidesButton").click();
-  assert.match(app.nodes.get("guideSummary").textContent, /hidden/);
-  app.select("horizontal");
-  assert.equal(app.state.guidesVisible, true);
-  assert.match(app.nodes.get("guideSummary").textContent, /1 horizontal guide highlighted/);
+  app.load(multipleLines());
+  app.nodes.get("nextLineButton").click();
+  app.nodes.get("downloadButton").click();
+  const exported = app.canvases.at(-1);
+  assert.equal(exported.width, 300);
+  assert.equal(exported.height, 200);
+  assert.equal(exported.context.calls.length, 1);
+  assert.equal(exported.context.calls[0].method, "putImageData");
+  assert.equal(exported.context.calls[0].args[0], app.state.workingImageData);
 });
 
-test("sensitivity can detect faint lines; plain backgrounds and hard edges stay unmarked", () => {
+test("plain backgrounds, hard edges and transparency stay unmarked", () => {
   const app = harness();
-  const faint = fixture("horizontal", 3, 151);
-  assert.equal(app.context.detectLines(faint, 10, "horizontal").length, 0);
-  assert.equal(app.context.detectLines(faint, 95, "horizontal").length, 1);
-  const blank = fixture("vertical", 0);
-  for (const orientation of ["vertical", "horizontal"]) {
-    assert.equal(app.context.detectLines(blank, 95, orientation).length, 0);
-  }
+  const blank = fixture("horizontal", 0);
+  assert.equal(app.context.detectLines(blank, 95).length, 0);
   for (let y = 100; y < blank.height; y += 1) {
     for (let x = 0; x < blank.width; x += 1) {
       const pixel = (y * blank.width + x) * 4;
       blank.data.fill(30, pixel, pixel + 3);
     }
   }
-  assert.equal(app.context.detectLines(blank, 95, "horizontal").length, 0);
+  assert.equal(app.context.detectLines(blank, 95).length, 0);
   blank.data.fill(0);
-  assert.equal(app.context.detectLines(blank, 95, "horizontal").length, 0);
+  assert.equal(app.context.detectLines(blank, 95).length, 0);
 });
 
-test("PNG export uses only image pixels, never the highlight canvas", () => {
-  const app = harness();
-  app.load(fixture("both"));
-  app.nodes.get("downloadButton").click();
-  const calls = app.canvases[0].context.calls;
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].method, "putImageData");
-  assert.equal(calls[0].args[0], app.state.workingImageData);
-});
-
-test("HTML references matching versioned script/style files and accessible radio choices", () => {
+test("HTML has selection buttons, no direction/highlight switches, and matching versioned assets", () => {
+  assert.doesNotMatch(html, /name="orientation"|toggleGuidesButton|Hide guides|Vertical/);
+  assert.match(html, /id="previousLineButton"/);
+  assert.match(html, /id="nextLineButton"/);
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(new Set(ids).size, ids.length);
   const assets = [...html.matchAll(/(?:src|href)="((?:app\.js|styles\.css)[^"]*)"/g)].map((match) => match[1]);
   assert.equal(assets.length, 2);
   assert.equal(assets[0].split("?")[1], assets[1].split("?")[1]);
-  for (const asset of assets) {
-    assert.match(asset, /\?v=/);
-    assert.ok(fs.existsSync(path.join(root, asset.split("?")[0])));
-  }
-  assert.equal((html.match(/type="radio" name="orientation"/g) || []).length, 3);
-  const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
-  assert.match(css, /input:checked \+ span/);
-  assert.match(css, /hover input:not\(:checked\)/);
+  for (const asset of assets) assert.ok(fs.existsSync(path.join(root, asset.split("?")[0])));
 });
