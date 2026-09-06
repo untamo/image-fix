@@ -59,13 +59,12 @@ button:focus-visible, input:focus-visible {
 .canvas-area {
   display: flex;
   flex-direction: column;
-  height: max(360px, calc(100svh - 16px));
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: #10151b;
 }
-.image-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.image-viewport { position: relative; flex: none; height: 200px; overflow: hidden; }
 .canvas-stage { position: absolute; inset: 0; }
 .canvas-stage canvas { display: block; width: 100%; height: 100%; }
 #guideCanvas { position: absolute; inset: 0; pointer-events: none; }

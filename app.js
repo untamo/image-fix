@@ -179,25 +179,43 @@ function drawGuides() {
   elements.nextLineButton.style.left = `${center}px`;
 }
 
+// Remove unused canvas space while keeping the focus arrows within the image area.
+function fitPreviewLayout(width, height, viewWidth, maxHeight, lines, selectedIndex) {
+  const layout = buildFocusLayout(width, height, viewWidth, maxHeight, lines, selectedIndex);
+  const selected = lines[selectedIndex];
+  const lens = selected ? focusBounds(layout, selected, height) : null;
+  let top = Math.max(0, Math.min(mappedY(layout, 0), lens ? lens.top - 50 : Infinity));
+  const bottom = Math.min(maxHeight, Math.max(mappedY(layout, height), lens ? lens.bottom + 50 : 0));
+  // Keep the three action buttons reachable even for very shallow images.
+  top = Math.min(top, bottom - 196);
+  layout.offset -= top;
+  layout.viewHeight = Math.max(1, bottom - top);
+  return layout;
+}
+
 function renderPreview() {
   if (!state.workingImageData) return;
   const bounds = elements.canvasStage.getBoundingClientRect();
-  if (!bounds.width || !bounds.height) return;
-  // The stage measures only the image; sensitivity has its own row below it.
+  if (!bounds.width) return;
+  // Derive available height from the window, never the previously trimmed stage.
+  // This keeps resizing and selection changes free of layout feedback loops.
+  const controlHeight = elements.controlsPanel.getBoundingClientRect().height;
+  const maxHeight = Math.max(200, window.innerHeight - controlHeight - 18);
   const { width, height } = state.workingImageData;
-  const layout = buildFocusLayout(width, height, bounds.width, bounds.height,
+  const layout = fitPreviewLayout(width, height, bounds.width, maxHeight,
     state.detections, state.selectedLineIndex);
+  elements.canvasStage.parentElement.style.height = `${layout.viewHeight}px`;
   state.previewLayout = layout;
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
   elements.previewCanvas.width = Math.round(bounds.width * pixelRatio);
-  elements.previewCanvas.height = Math.round(bounds.height * pixelRatio);
+  elements.previewCanvas.height = Math.round(layout.viewHeight * pixelRatio);
   previewContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  previewContext.clearRect(0, 0, bounds.width, bounds.height);
+  previewContext.clearRect(0, 0, bounds.width, layout.viewHeight);
   previewContext.imageSmoothingEnabled = false;
   const left = (bounds.width - layout.width) / 2;
   for (const part of layout.segments) {
     const top = Math.max(0, part.top + layout.offset);
-    const bottom = Math.min(bounds.height, part.bottom + layout.offset);
+    const bottom = Math.min(layout.viewHeight, part.bottom + layout.offset);
     if (bottom <= top) continue;
     const sourceTop = part.start + (top - part.top - layout.offset) / part.pixelsPerRow;
     const sourceHeight = (bottom - top) / part.pixelsPerRow;

@@ -32,7 +32,7 @@ function harness() {
     return {
       value: "", checked: false, textContent: "", disabled: false, dataset: {},
       attributes: {}, classList: { toggle() {}, add() {}, remove() {} },
-      width: 300, height: 150, context, style: {},
+      width: 300, height: 150, context, style: {}, parentElement: { style: {} },
       setAttribute(key, value) { this.attributes[key] = value; },
       getContext() { return context; },
       getBoundingClientRect() { return bounds; },
@@ -49,7 +49,7 @@ function harness() {
   nodes.get("sensitivity").value = "60";
   const context = vm.createContext({
     ImageData: ImageDataStub,
-    window: { devicePixelRatio: 2, addEventListener() {}, setTimeout() {} },
+    window: { get innerHeight() { return bounds.height + 58; }, devicePixelRatio: 2, addEventListener() {}, setTimeout() {} },
     ResizeObserver: class { constructor(callback) { resizeCallback = callback; } observe() {} },
     URL: { createObjectURL() { return "blob:local-test"; }, revokeObjectURL() {} },
     document: {
@@ -291,15 +291,17 @@ test("resizing redraws display pixels and keeps selected image bands centered in
   app.bounds.height = 300;
   app.resize();
   assert.equal(app.nodes.get("previewCanvas").width, 900);
-  assert.equal(app.nodes.get("guideCanvas").height, 600);
+  assert.equal(app.nodes.get("guideCanvas").height, Math.round(app.state.previewLayout.viewHeight * 2));
+  assert.ok(app.state.previewLayout.viewHeight < app.bounds.height);
   const line = app.state.detections[app.state.selectedLineIndex];
-  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), app.bounds.height / 2);
+  const center = app.context.mappedY(app.state.previewLayout, line.start + line.width / 2);
+  assert.ok(center >= 75 && center <= app.state.previewLayout.viewHeight - 75);
   assert.ok(app.nodes.get("previousLineButton"));
   assert.ok(app.nodes.get("nextLineButton"));
   app.load(fixture("horizontal", 1, 20, 1800, 200));
   const lineCenter = app.context.mappedY(app.state.previewLayout,
     app.state.detections[app.state.selectedLineIndex].start + 0.5);
-  near(lineCenter, app.bounds.height / 2);
+  assert.ok(lineCenter >= 75 && lineCenter <= app.state.previewLayout.viewHeight - 75);
   assert.ok(parseFloat(app.nodes.get("previousLineButton").style.top) >= 0);
   assert.ok(parseFloat(app.nodes.get("nextLineButton").style.top) + 44 <= app.bounds.height);
 
@@ -468,4 +470,22 @@ test("color-only horizontal damage is detected even at near-equal luminance", ()
   const lines = app.context.detectLines(image, 60);
   assert.equal(lines.length, 1);
   assert.equal(lines[0].start, 90);
+});
+
+test("image area trims empty space before sensitivity for portrait and landscape images", () => {
+  const app = harness();
+  for (const [width, height, row] of [[1152, 1536, 1103], [1800, 800, 400]]) {
+    const layout = app.context.fitPreviewLayout(width, height, 400, 700, [{ start: row }], 0);
+    near(app.context.mappedY(layout, height), layout.viewHeight);
+    assert.ok(layout.viewHeight < 700);
+    const lens = app.context.focusBounds(layout, { start: row }, height);
+    assert.ok(lens.top >= 50);
+    assert.ok(lens.bottom + 50 <= layout.viewHeight);
+  }
+  const plain = app.context.fitPreviewLayout(1800, 1000, 400, 700, [], -1);
+  near(app.context.mappedY(plain, 0), 0);
+  near(app.context.mappedY(plain, 1000), plain.viewHeight);
+  const shallow = app.context.fitPreviewLayout(1800, 200, 400, 700, [], -1);
+  assert.ok(shallow.viewHeight >= 196, "All three action buttons remain reachable");
+  near(app.context.mappedY(shallow, 200), shallow.viewHeight);
 });
