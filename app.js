@@ -9,6 +9,8 @@ const state = {
   guidesVisible: true,
   fileBaseName: "cleaned-image",
   orientation: "vertical",
+  controlsVisible: true,
+  controlsPosition: "bottom",
 };
 
 const elements = {
@@ -17,6 +19,10 @@ const elements = {
   dropzone: document.querySelector("#dropzone"),
   canvasArea: document.querySelector("#canvasArea"),
   canvasStage: document.querySelector("#canvasStage"),
+  editorShell: document.querySelector("#editorShell"),
+  controlsPanel: document.querySelector("#controlsPanel"),
+  toggleControlsButton: document.querySelector("#toggleControlsButton"),
+  moveControlsButton: document.querySelector("#moveControlsButton"),
   previewCanvas: document.querySelector("#previewCanvas"),
   guideCanvas: document.querySelector("#guideCanvas"),
   workspaceHeading: document.querySelector("#workspaceHeading"),
@@ -131,6 +137,7 @@ function setOrientation(orientation) {
 
 function updateControls() {
   const loaded = hasImage();
+  elements.editorShell.classList.toggle("is-editing", loaded);
   elements.detectButton.disabled = !loaded;
   elements.removeButton.disabled = !loaded || state.detections.length === 0;
   elements.undoButton.disabled = !loaded || state.history.length === 0;
@@ -558,6 +565,24 @@ function toggleGuides() {
   setGuidesVisible(!state.guidesVisible);
 }
 
+function toggleControls() {
+  state.controlsVisible = !state.controlsVisible;
+  elements.controlsPanel.classList.toggle("hidden", !state.controlsVisible);
+  elements.toggleControlsButton.setAttribute("aria-expanded", String(state.controlsVisible));
+  elements.toggleControlsButton.textContent = state.controlsVisible ? "Hide controls" : "Show controls";
+  elements.moveControlsButton.disabled = !state.controlsVisible;
+}
+
+function moveControls() {
+  state.controlsPosition = state.controlsPosition === "bottom" ? "top" : "bottom";
+  elements.controlsPanel.dataset.position = state.controlsPosition;
+  elements.moveControlsButton.textContent = state.controlsPosition === "bottom"
+    ? "Move controls to top" : "Move controls to bottom";
+}
+
+elements.toggleControlsButton.addEventListener("click", toggleControls);
+elements.moveControlsButton.addEventListener("click", moveControls);
+
 elements.chooseButton.addEventListener("click", () => elements.fileInput.click());
 elements.fileInput.addEventListener("change", (event) => {
   loadImageFile(event.target.files[0]);
@@ -583,7 +608,12 @@ elements.toggleGuidesButton.addEventListener("click", toggleGuides);
 
 elements.sensitivity.addEventListener("input", () => {
   elements.sensitivityValue.textContent = `${elements.sensitivity.value}%`;
-  if (hasImage()) runDetection({ announce: false });
+  if (hasImage()) {
+    state.guidesVisible = true;
+    elements.toggleGuidesButton.textContent = "Hide guides";
+    elements.toggleGuidesButton.setAttribute("aria-pressed", "true");
+    runDetection({ announce: false });
+  }
 });
 
 elements.dropzone.addEventListener("click", (event) => {

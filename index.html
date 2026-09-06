@@ -8,7 +8,7 @@
       content="Remove distracting vertical or horizontal lines from an image in your browser."
     />
     <title>LineLift — remove image lines</title>
-    <link rel="stylesheet" href="styles.css?v=direction-fix-2" />
+    <link rel="stylesheet" href="styles.css?v=overlay-controls-1" />
   </head>
   <body>
     <header class="topbar">
@@ -41,7 +41,7 @@
       </div>
     </header>
 
-    <main class="page-shell">
+    <main class="page-shell" id="editorShell">
       <section class="page-intro" aria-labelledby="pageTitle">
         <div>
           <p class="eyebrow">Image workspace</p>
@@ -94,6 +94,81 @@
               <canvas id="previewCanvas" aria-label="Image preview"></canvas>
               <canvas id="guideCanvas" aria-hidden="true"></canvas>
             </div>
+            <div class="editor-toolbar" role="group" aria-label="Preview controls">
+              <button class="button button-secondary" id="moveControlsButton" type="button" aria-controls="controlsPanel">Move controls to top</button>
+              <button class="button button-secondary" id="toggleControlsButton" type="button" aria-controls="controlsPanel" aria-expanded="true">Hide controls</button>
+            </div>
+            <aside class="panel controls-panel" id="controlsPanel" aria-labelledby="controlsHeading" data-position="bottom">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">Controls</p>
+                  <h2 id="controlsHeading">Line removal</h2>
+                </div>
+                <span class="control-badge">Auto</span>
+              </div>
+
+              <div class="control-block">
+                <div class="control-label-row">
+                  <span class="control-label">Line direction</span>
+                  <span class="direction-hint" id="directionHint">Vertical selected</span>
+                </div>
+                <div class="segmented-control" role="group" aria-label="Line direction">
+                  <label class="direction-option">
+                    <input type="radio" name="orientation" value="vertical" checked />
+                    <span><span aria-hidden="true">↕</span> Vertical</span>
+                  </label>
+                  <label class="direction-option">
+                    <input type="radio" name="orientation" value="horizontal" />
+                    <span><span aria-hidden="true">↔</span> Horizontal</span>
+                  </label>
+                  <label class="direction-option">
+                    <input type="radio" name="orientation" value="both" />
+                    <span><span aria-hidden="true">✚</span> Both</span>
+                  </label>
+                </div>
+                <p class="helper-text">Direction and sensitivity update the guides as you adjust.</p>
+              </div>
+
+              <div class="control-block">
+                <div class="control-label-row">
+                  <label for="sensitivity">Detection sensitivity</label>
+                  <output id="sensitivityValue" for="sensitivity">60%</output>
+                </div>
+                <input id="sensitivity" type="range" min="10" max="95" value="60" />
+                <div class="range-labels" aria-hidden="true">
+                  <span>Precise</span>
+                  <span>Find more</span>
+                </div>
+              </div>
+
+              <div class="detection-card">
+                <div class="detection-card-top">
+                  <div>
+                    <span class="metric-label">Detected guides</span>
+                    <strong id="lineCount">0</strong>
+                  </div>
+                  <span class="metric-status" id="detectionStatus">Waiting</span>
+                </div>
+                <p id="lineCoverage">Upload an image to begin detection.</p>
+              </div>
+
+              <div class="control-actions">
+                <button class="button button-secondary button-wide" id="detectButton" type="button" disabled>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                    <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8" />
+                  </svg>
+                  <span id="detectButtonLabel">Detect vertical lines</span>
+                </button>
+                <button class="button button-primary button-wide" id="removeButton" type="button" disabled>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  </svg>
+                  <span id="removeButtonLabel">Remove detected lines</span>
+                </button>
+              </div>
+
+            </aside>
           </div>
 
           <div class="canvas-footer">
@@ -111,87 +186,6 @@
           </div>
           <p class="notice notice-error hidden" id="errorNotice" role="alert"></p>
         </section>
-
-        <aside class="panel controls-panel" aria-labelledby="controlsHeading">
-          <div class="panel-heading compact">
-            <div>
-              <p class="eyebrow">Controls</p>
-              <h2 id="controlsHeading">Line removal</h2>
-            </div>
-            <span class="control-badge">Auto</span>
-          </div>
-
-          <div class="control-block">
-            <div class="control-label-row">
-              <span class="control-label">Line direction</span>
-              <span class="direction-hint" id="directionHint">Vertical selected</span>
-            </div>
-            <div class="segmented-control" role="group" aria-label="Line direction">
-              <label class="direction-option">
-                <input type="radio" name="orientation" value="vertical" checked />
-                <span><span aria-hidden="true">↕</span> Vertical</span>
-              </label>
-              <label class="direction-option">
-                <input type="radio" name="orientation" value="horizontal" />
-                <span><span aria-hidden="true">↔</span> Horizontal</span>
-              </label>
-              <label class="direction-option">
-                <input type="radio" name="orientation" value="both" />
-                <span><span aria-hidden="true">✚</span> Both</span>
-              </label>
-            </div>
-            <p class="helper-text">Changing direction updates the highlights automatically. Vertical runs up and down; horizontal runs left to right.</p>
-          </div>
-
-          <div class="control-block">
-            <div class="control-label-row">
-              <label for="sensitivity">Detection sensitivity</label>
-              <output id="sensitivityValue" for="sensitivity">60%</output>
-            </div>
-            <input id="sensitivity" type="range" min="10" max="95" value="60" />
-            <div class="range-labels" aria-hidden="true">
-              <span>Precise</span>
-              <span>Find more</span>
-            </div>
-            <p class="helper-text">Raise sensitivity for faint lines. Best for straight lines across much of the image; review the highlights before removing.</p>
-          </div>
-
-          <div class="detection-card">
-            <div class="detection-card-top">
-              <div>
-                <span class="metric-label">Detected guides</span>
-                <strong id="lineCount">0</strong>
-              </div>
-              <span class="metric-status" id="detectionStatus">Waiting</span>
-            </div>
-            <p id="lineCoverage">Upload an image to begin detection.</p>
-          </div>
-
-          <div class="control-actions">
-            <button class="button button-secondary button-wide" id="detectButton" type="button" disabled>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8" />
-              </svg>
-              <span id="detectButtonLabel">Detect vertical lines</span>
-            </button>
-            <button class="button button-primary button-wide" id="removeButton" type="button" disabled>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-              </svg>
-              <span id="removeButtonLabel">Remove detected lines</span>
-            </button>
-          </div>
-
-          <div class="how-it-works">
-            <p class="eyebrow">How it works</p>
-            <ol>
-              <li><span>1</span><p>Upload your image</p></li>
-              <li><span>2</span><p>Review the highlighted guides</p></li>
-              <li><span>3</span><p>Download the cleaned PNG</p></li>
-            </ol>
-          </div>
-        </aside>
       </div>
 
       <footer class="page-footer">
@@ -201,6 +195,7 @@
       </footer>
     </main>
 
-    <script src="app.js?v=direction-fix-2"></script>
+    <script src="app.js?v=overlay-controls-1"></script>
   </body>
 </html>
+
