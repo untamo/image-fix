@@ -12,8 +12,6 @@ const state = {
   previewRepair: false,
   repairPlan: null,
   repairedRows: [],
-  controlsVisible: true,
-  controlsPosition: "bottom",
 };
 
 const elements = {
@@ -29,8 +27,6 @@ const elements = {
   selectedLineStatus: document.querySelector("#selectedLineStatus"),
   editorShell: document.querySelector("#editorShell"),
   controlsPanel: document.querySelector("#controlsPanel"),
-  toggleControlsButton: document.querySelector("#toggleControlsButton"),
-  moveControlsButton: document.querySelector("#moveControlsButton"),
   previewCanvas: document.querySelector("#previewCanvas"),
   guideCanvas: document.querySelector("#guideCanvas"),
   workspaceHeading: document.querySelector("#workspaceHeading"),
@@ -42,9 +38,6 @@ const elements = {
   sensitivityValue: document.querySelector("#sensitivityValue"),
   previewRepairButton: document.querySelector("#previewRepairButton"),
   removeButton: document.querySelector("#removeButton"),
-  removeButtonLabel: document.querySelector("#removeButtonLabel"),
-  undoButton: document.querySelector("#undoButton"),
-  resetButton: document.querySelector("#resetButton"),
   downloadButton: document.querySelector("#downloadButton"),
 };
 
@@ -83,11 +76,9 @@ function updateControls() {
   const loaded = hasImage();
   elements.editorShell.classList.toggle("is-editing", loaded);
   elements.previewRepairButton.disabled = !loaded || state.selectedLineIndex < 0;
-  elements.previewRepairButton.textContent = state.previewRepair ? "Show original" : "Preview fix";
+  elements.previewRepairButton.setAttribute("title", state.previewRepair ? "Preview: showing repair — click to show original" : "Preview repair");
   elements.previewRepairButton.setAttribute("aria-pressed", String(state.previewRepair));
   elements.removeButton.disabled = !loaded || state.detections.length === 0;
-  elements.undoButton.disabled = !loaded || state.history.length === 0;
-  elements.resetButton.disabled = !loaded;
   elements.downloadButton.disabled = !loaded;
   elements.previousLineButton.disabled = state.detections.length < 2;
   elements.nextLineButton.disabled = state.detections.length < 2;
@@ -194,16 +185,11 @@ function renderPreview() {
   if (!state.workingImageData) return;
   const bounds = elements.canvasStage.getBoundingClientRect();
   if (!bounds.width || !bounds.height) return;
-  // Center the selected line in the space left clear by the floating controls.
-  const toolbar = elements.editorToolbar.getBoundingClientRect();
-  let clearTop = Math.max(0, toolbar.bottom - bounds.top + 8);
-  let clearBottom = bounds.height;
-  if (state.controlsVisible) {
-    const panel = elements.controlsPanel.getBoundingClientRect();
-    if (state.controlsPosition === "bottom") clearBottom = panel.top - bounds.top - 8;
-    else clearTop = Math.max(clearTop, panel.bottom - bounds.top + 8);
-  }
-  const focusY = clearBottom > clearTop ? (clearTop + clearBottom) / 2 : bounds.height / 2;
+  // Keep the fisheye and its navigation arrows above the sensitivity slider.
+  // The action column sits to the right, so it does not consume vertical space.
+  const panel = elements.controlsPanel.getBoundingClientRect();
+  const clearBottom = Math.min(bounds.height, panel.top - bounds.top - 8);
+  const focusY = Math.max(75, clearBottom / 2);
   const { width, height } = state.workingImageData;
   const layout = buildFocusLayout(width, height, bounds.width, bounds.height,
     state.detections, state.selectedLineIndex, focusY);
@@ -671,26 +657,6 @@ function downloadImage() {
   }, "image/png");
 }
 
-function toggleControls() {
-  state.controlsVisible = !state.controlsVisible;
-  elements.controlsPanel.classList.toggle("hidden", !state.controlsVisible);
-  elements.toggleControlsButton.setAttribute("aria-expanded", String(state.controlsVisible));
-  elements.toggleControlsButton.textContent = state.controlsVisible ? "Hide controls" : "Show controls";
-  elements.moveControlsButton.disabled = !state.controlsVisible;
-  renderPreview();
-}
-
-function moveControls() {
-  state.controlsPosition = state.controlsPosition === "bottom" ? "top" : "bottom";
-  elements.controlsPanel.dataset.position = state.controlsPosition;
-  elements.moveControlsButton.textContent = state.controlsPosition === "bottom"
-    ? "Move controls to top" : "Move controls to bottom";
-  renderPreview();
-}
-
-elements.toggleControlsButton.addEventListener("click", toggleControls);
-elements.moveControlsButton.addEventListener("click", moveControls);
-
 elements.chooseButton.addEventListener("click", () => elements.fileInput.click());
 elements.fileInput.addEventListener("change", (event) => {
   loadImageFile(event.target.files[0]);
@@ -700,8 +666,6 @@ elements.previousLineButton.addEventListener("click", () => cycleSelectedLine(-1
 elements.nextLineButton.addEventListener("click", () => cycleSelectedLine(1));
 elements.previewRepairButton.addEventListener("click", toggleRepairPreview);
 elements.removeButton.addEventListener("click", fixSelectedLine);
-elements.undoButton.addEventListener("click", undoLastEdit);
-elements.resetButton.addEventListener("click", resetImage);
 elements.downloadButton.addEventListener("click", downloadImage);
 
 elements.sensitivity.addEventListener("input", () => {
@@ -752,7 +716,6 @@ if (typeof ResizeObserver !== "undefined") {
   const guideResizeObserver = new ResizeObserver(renderPreview);
   guideResizeObserver.observe(elements.canvasStage);
   guideResizeObserver.observe(elements.controlsPanel);
-  guideResizeObserver.observe(elements.editorToolbar);
 }
 window.addEventListener("resize", renderPreview);
 

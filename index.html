@@ -8,7 +8,7 @@
       content="Remove distracting horizontal lines from an image in your browser."
     />
     <title>LineLift — remove image lines</title>
-    <link rel="stylesheet" href="styles.css?v=one-selection-per-line-1" />
+    <link rel="stylesheet" href="styles.css?v=image-action-icons-1" />
   </head>
   <body>
     <header class="topbar">
@@ -25,20 +25,6 @@
         </span>
       </a>
 
-      <div class="topbar-actions">
-        <button class="button button-ghost" id="undoButton" type="button" disabled>
-          Undo
-        </button>
-        <button class="button button-ghost" id="resetButton" type="button" disabled>
-          Reset
-        </button>
-        <button class="button button-primary" id="downloadButton" type="button" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16.5v2A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          Download PNG
-        </button>
-      </div>
     </header>
 
     <main class="page-shell" id="editorShell">
@@ -98,44 +84,32 @@
               <button class="button focus-arrow" id="previousLineButton" type="button" aria-label="Select previous line above" disabled>↑</button>
               <button class="button focus-arrow" id="nextLineButton" type="button" aria-label="Select next line below" disabled>↓</button>
             </div>
-            <div class="editor-toolbar" id="editorToolbar" role="group" aria-label="Preview controls">
-              <div class="panel-tools">
-                <button class="button button-secondary" id="moveControlsButton" type="button" aria-controls="controlsPanel">Move controls to top</button>
-                <button class="button button-secondary" id="toggleControlsButton" type="button" aria-controls="controlsPanel" aria-expanded="true">Hide controls</button>
-              </div>
+            <div class="image-actions" id="editorToolbar" role="toolbar" aria-label="Image actions" aria-orientation="vertical">
+              <button class="button image-action" id="previewRepairButton" type="button" aria-label="Preview" title="Preview" aria-pressed="false" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+              <button class="button image-action image-action-primary" id="removeButton" type="button" aria-label="Fix" title="Fix" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m4 17 12-12 4 4L8 21Z M13 8l4 4" />
+                  <path d="M5 3v4M3 5h4M18 2v4M16 4h4M20 16v4M18 18h4" />
+                </svg>
+              </button>
+              <button class="button image-action" id="downloadButton" type="button" aria-label="Save" title="Save PNG" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3" />
+                </svg>
+              </button>
             </div>
-            <aside class="panel controls-panel" id="controlsPanel" aria-labelledby="controlsHeading" data-position="bottom">
-              <div class="panel-heading compact">
-                <div>
-                  <p class="eyebrow">Controls</p>
-                  <h2 id="controlsHeading">Line removal</h2>
-                </div>
-                <span class="control-badge">Auto</span>
+            <div class="sensitivity-dock" id="controlsPanel">
+              <div class="control-label-row">
+                <label for="sensitivity">Sensitivity</label>
+                <output id="sensitivityValue" for="sensitivity">60%</output>
               </div>
-
-              <div class="control-block">
-                <div class="control-label-row">
-                  <label for="sensitivity">Detection sensitivity</label>
-                  <output id="sensitivityValue" for="sensitivity">60%</output>
-                </div>
-                <input id="sensitivity" type="range" min="10" max="95" value="60" />
-                <div class="range-labels" aria-hidden="true">
-                  <span>Precise</span>
-                  <span>Find more</span>
-                </div>
-              </div>
-
-              <div class="control-actions">
-                <button class="button button-secondary button-wide" id="previewRepairButton" type="button" aria-pressed="false" disabled>Preview fix</button>
-                <button class="button button-primary button-wide" id="removeButton" type="button" disabled>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                  </svg>
-                  <span id="removeButtonLabel">Fix line</span>
-                </button>
-              </div>
-
-            </aside>
+              <input id="sensitivity" type="range" min="10" max="95" value="60" />
+            </div>
           </div>
 
           <div class="canvas-footer">
@@ -159,7 +133,7 @@
       </footer>
     </main>
 
-    <script src="app.js?v=one-selection-per-line-1"></script>
+    <script src="app.js?v=image-action-icons-1"></script>
   </body>
 </html>
 

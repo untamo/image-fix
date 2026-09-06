@@ -12,15 +12,17 @@ A vertical fisheye is centered on that single row. It enlarges the selected row 
 
 Only the outer perimeter of the zoomed area has a green outline. All image rows inside it remain free of highlights, fills, and guide strokes. **Preview fix** temporarily shows the proposed repaired strip in the fisheye. **Show original** restores the original preview. Previewing does not change the image, history, or download.
 
-The controls float over the preview on desktop and mobile. Adjust sensitivity to refresh detection; selection stays on the closest remaining line. Use **Hide controls** for more inspection space, or **Move controls to top/bottom**. Smaller screens can scroll within the panel.
+Once an image is loaded, the action buttons appear as a single icon column on the right of the image: **Preview** (eye), **Fix** (wand), and **Save** (download). Preview has a highlighted active state and toggles between the proposed repair and original pixels. Save downloads the cleaned PNG. Buttons have accessible names and tooltips.
 
-Choose **Fix line** to repair the selected stripe, including any detected color bleed around it. The selection remains exactly one pixel row; the repair can cover several rows when the defect extends beyond its center. The footer reports the repair's row range before applying it. Clean reference rows are chosen outside that range, and only pixels within the reported strip are changed. This prevents JPEG halos from being copied into the repair.
+The **↑ / ↓** navigation arrows remain immediately above and below the zoom outline, and sensitivity remains in a compact slider at the bottom of the image. The old movable panel and extra action buttons are removed. Adjusting sensitivity refreshes detection while retaining the nearest remaining line.
+
+Choose **Fix** to repair the selected stripe, including any detected color bleed around it. The selection remains exactly one pixel row; the repair can cover several rows when the defect extends beyond its center. The footer reports the repair's row range before applying it. Clean reference rows are chosen outside that range, and only pixels within the reported strip are changed. This prevents JPEG halos from being copied into the repair.
 
 Detection considers brightness and color differences so tinted residue can be detected even when it has little brightness contrast. The repair expands through coherent neighboring color contamination, up to six rows beyond each detected edge. It uses stable image columns to distinguish bleed from texture; preview the result on detailed areas.
 
-Fixed rows are excluded from subsequent detection until Undo or Reset restores them. **Undo** restores the complete previous image, selection, and sensitivity. **Reset** restores the original image. When no candidate rows remain, the preview shows the whole image normally and line navigation is disabled.
+Fixed rows are excluded from subsequent detection until the edit is undone or the image is reloaded. **Ctrl/Cmd+Z** restores the complete previous image, selection, and sensitivity. When no candidate rows remain, the preview shows the whole image normally and line navigation is disabled.
 
-**Download PNG** exports the cleaned image at its working dimensions, without magnification or highlights. Large input images are reduced to the existing processing limits (2,600 pixels per dimension and 12 megapixels). Processing stays local in the browser; no upload or server is required.
+**Save** exports the cleaned image at its working dimensions, without magnification or highlights. Large input images are reduced to the existing processing limits (2,600 pixels per dimension and 12 megapixels). Processing stays local in the browser; no upload or server is required.
 
 Detection is designed for thin, straight light or dark horizontal stripes across a substantial part of the image, including multi-pixel bands. Vertical, short, curved, or diagonal marks are not supported. Preview the repair before applying it; interpolation can soften detailed areas.
 

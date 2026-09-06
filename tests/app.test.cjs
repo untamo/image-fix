@@ -266,12 +266,12 @@ test("Undo restores pixels, sensitivity, selection and magnification; Reset rest
   assert.notDeepEqual(app.state.workingImageData.data, original);
   assert.equal(app.state.repairedRows.length, 1);
   app.nodes.get("sensitivity").value = "95";
-  app.nodes.get("undoButton").click();
+  app.context.undoLastEdit();
   assert.equal(app.state.selectedLineIndex, 1);
   assert.equal(app.nodes.get("sensitivity").value, "60");
   assert.deepEqual(app.state.workingImageData.data, original);
   app.nodes.get("removeButton").click();
-  app.nodes.get("resetButton").click();
+  app.context.resetImage();
   assert.deepEqual(app.state.workingImageData.data, original);
   assert.equal(app.state.history.length, 0);
   assert.ok(app.state.selectedLineIndex >= 0);
@@ -286,9 +286,9 @@ test("resizing redraws display pixels and keeps selected image bands centered in
   assert.equal(app.nodes.get("previewCanvas").width, 900);
   assert.equal(app.nodes.get("guideCanvas").height, 600);
   const line = app.state.detections[app.state.selectedLineIndex];
-  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), (28 + 252) / 2);
-  app.nodes.get("toggleControlsButton").click();
-  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), (28 + 300) / 2);
+  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), 252 / 2);
+  assert.ok(app.nodes.get("previousLineButton"));
+  assert.ok(app.nodes.get("nextLineButton"));
 });
 
 test("export contains original-size image pixels without highlights or magnification", () => {
@@ -325,7 +325,13 @@ test("HTML has selection buttons, no direction/highlight switches, and matching 
   assert.match(html, /id="previousLineButton"/);
   assert.match(html, /id="nextLineButton"/);
   assert.match(html, /id="previewRepairButton"/);
-  assert.match(html, /Fix line/);
+  assert.match(html, /id="removeButton"[^>]+aria-label="Fix"/);
+  const actions = html.slice(html.indexOf('class="image-actions"'), html.indexOf('class="sensitivity-dock"'));
+  assert.deepEqual([...actions.matchAll(/<button[^>]+id="([^"]+)"/g)].map((match) => match[1]),
+    ["previewRepairButton", "removeButton", "downloadButton"]);
+  assert.equal((actions.match(/<svg /g) || []).length, 3);
+  assert.doesNotMatch(html, /id="(?:moveControlsButton|toggleControlsButton|undoButton|resetButton)"/);
+  assert.match(html, /id="sensitivity" type="range"/);
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(new Set(ids).size, ids.length);
   const assets = [...html.matchAll(/(?:src|href)="((?:app\.js|styles\.css)[^"]*)"/g)].map((match) => match[1]);
@@ -357,7 +363,7 @@ test("one-pixel selection repairs the full detected stripe and preserves all sur
   app.nodes.get("sensitivity").value = "95";
   app.nodes.get("sensitivity").fire("input");
   assert.ok(!app.state.detections.some((line) => line.start === selectedRow));
-  app.nodes.get("undoButton").click();
+  app.context.undoLastEdit();
   assert.equal(app.state.repairedRows.length, 0);
   assert.equal(app.state.detections[app.state.selectedLineIndex].start, selectedRow);
   assert.deepEqual(app.state.workingImageData.data, original);
@@ -382,7 +388,7 @@ test("Preview fix is reversible and its single-row pixels exactly match the appl
   assert.deepEqual(app.state.workingImageData.data.slice(selectedRow * 300 * 4, (selectedRow + 1) * 300 * 4), previewStrip);
   assert.equal(app.state.selectedLineIndex, -1);
   assert.ok(app.nodes.get("previewRepairButton").disabled);
-  app.nodes.get("undoButton").click();
+  app.context.undoLastEdit();
   assert.deepEqual(app.state.workingImageData.data, original);
 });
 
@@ -434,7 +440,7 @@ test("multi-row preview and apply use identical repair pixels and Undo restores 
   assert.deepEqual(app.state.workingImageData.data.slice(0, start), original.slice(0, start));
   assert.deepEqual(app.state.workingImageData.data.slice(end), original.slice(end));
   assert.equal(app.state.selectedLineIndex, -1);
-  app.nodes.get("undoButton").click();
+  app.context.undoLastEdit();
   assert.deepEqual(app.state.workingImageData.data, original);
 });
 
