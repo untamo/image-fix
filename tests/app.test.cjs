@@ -44,7 +44,7 @@ function harness() {
   }
   for (const [, id] of html.matchAll(/\bid="([^"]+)"/g)) nodes.set(id, node());
   nodes.get("editorToolbar").getBoundingClientRect = () => ({ top: 0, bottom: 20 });
-  nodes.get("controlsPanel").getBoundingClientRect = () => ({ top: bounds.height - 40, bottom: bounds.height });
+  nodes.get("controlsPanel").getBoundingClientRect = () => ({ top: bounds.height - 40, bottom: bounds.height, height: 40 });
   bounds.top = 0;
   nodes.get("sensitivity").value = "60";
   const context = vm.createContext({
@@ -130,20 +130,27 @@ test("empty and single-line images have valid selection and safe navigation", ()
   assert.ok(app.nodes.get("removeButton").disabled);
 });
 
-test("Up and Down wrap through lines in image order without editing pixels", () => {
+test("Up and Down enable only toward remaining lines and stop at the image ends", () => {
   const app = harness();
   app.load(multipleLines());
   const original = app.state.workingImageData.data.slice();
   assert.equal(app.state.detections.length, 7);
   assert.equal(app.state.selectedLineIndex, 0);
+  assert.ok(app.nodes.get("previousLineButton").disabled);
+  assert.equal(app.nodes.get("nextLineButton").disabled, false);
   app.nodes.get("previousLineButton").click();
-  assert.equal(app.state.selectedLineIndex, 6);
-  app.nodes.get("nextLineButton").click();
   assert.equal(app.state.selectedLineIndex, 0);
   for (let i = 1; i < 7; i += 1) {
     app.nodes.get("nextLineButton").click();
     assert.equal(app.state.selectedLineIndex, i);
+    assert.equal(app.nodes.get("previousLineButton").disabled, false);
+    assert.equal(app.nodes.get("nextLineButton").disabled, i === 6);
   }
+  app.nodes.get("nextLineButton").click();
+  assert.equal(app.state.selectedLineIndex, 6);
+  app.nodes.get("previousLineButton").click();
+  assert.equal(app.state.selectedLineIndex, 5);
+  assert.equal(app.nodes.get("nextLineButton").disabled, false);
   assert.equal(app.state.history.length, 0);
   assert.deepEqual(app.state.workingImageData.data, original);
 });
@@ -286,9 +293,16 @@ test("resizing redraws display pixels and keeps selected image bands centered in
   assert.equal(app.nodes.get("previewCanvas").width, 900);
   assert.equal(app.nodes.get("guideCanvas").height, 600);
   const line = app.state.detections[app.state.selectedLineIndex];
-  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), 252 / 2);
+  near(app.context.mappedY(app.state.previewLayout, line.start + line.width / 2), 244 / 2);
   assert.ok(app.nodes.get("previousLineButton"));
   assert.ok(app.nodes.get("nextLineButton"));
+  app.load(fixture("horizontal", 1, 20, 1800, 200));
+  const dockTop = parseFloat(app.nodes.get("controlsPanel").style.top);
+  const imageBottom = app.context.mappedY(app.state.previewLayout, 200);
+  const arrowBottom = parseFloat(app.nodes.get("nextLineButton").style.top) + 44;
+  assert.ok(dockTop >= imageBottom + 6);
+  assert.ok(dockTop >= arrowBottom + 6);
+  assert.ok(dockTop < app.bounds.height - 48, "Slider moves up from the viewport bottom toward the image");
 });
 
 test("export contains original-size image pixels without highlights or magnification", () => {
@@ -332,6 +346,8 @@ test("HTML has selection buttons, no direction/highlight switches, and matching 
   assert.equal((actions.match(/<svg /g) || []).length, 3);
   assert.doesNotMatch(html, /id="(?:moveControlsButton|toggleControlsButton|undoButton|resetButton)"/);
   assert.match(html, /id="sensitivity" type="range"/);
+  assert.doesNotMatch(html, /class="(?:canvas-footer|guide-legend|page-footer)"/);
+  assert.match(html, /class="sr-only"/);
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(new Set(ids).size, ids.length);
   const assets = [...html.matchAll(/(?:src|href)="((?:app\.js|styles\.css)[^"]*)"/g)].map((match) => match[1]);

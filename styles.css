@@ -994,3 +994,24 @@ input[type="range"] {
 .sensitivity-dock .control-label-row label,
 .sensitivity-dock .control-label-row output { font-size: 0.875rem; }
 .sensitivity-dock input[type="range"] { height: 32px; margin: 0; }
+
+/* Loaded images own the viewport; the upload screen keeps its introduction. */
+.page-shell.is-editing { width: calc(100% - 16px); max-width: 1440px; padding: 8px 0; }
+.is-editing .canvas-panel { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.is-editing .canvas-area {
+  --preview-height: max(360px, calc(100svh - 16px));
+  margin: 0;
+  border-radius: 16px;
+}
+.sensitivity-dock { bottom: auto; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

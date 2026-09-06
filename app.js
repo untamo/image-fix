@@ -15,6 +15,8 @@ const state = {
 };
 
 const elements = {
+  appHeader: document.querySelector("#appHeader"),
+  workspaceHeader: document.querySelector("#workspaceHeader"),
   fileInput: document.querySelector("#fileInput"),
   chooseButton: document.querySelector("#chooseButton"),
   dropzone: document.querySelector("#dropzone"),
@@ -75,13 +77,16 @@ function hasImage() {
 function updateControls() {
   const loaded = hasImage();
   elements.editorShell.classList.toggle("is-editing", loaded);
+  elements.appHeader.classList.toggle("hidden", loaded);
+  elements.workspaceHeader.classList.toggle("hidden", loaded);
   elements.previewRepairButton.disabled = !loaded || state.selectedLineIndex < 0;
   elements.previewRepairButton.setAttribute("title", state.previewRepair ? "Preview: showing repair — click to show original" : "Preview repair");
   elements.previewRepairButton.setAttribute("aria-pressed", String(state.previewRepair));
   elements.removeButton.disabled = !loaded || state.detections.length === 0;
   elements.downloadButton.disabled = !loaded;
-  elements.previousLineButton.disabled = state.detections.length < 2;
-  elements.nextLineButton.disabled = state.detections.length < 2;
+  elements.previousLineButton.disabled = !loaded || state.selectedLineIndex <= 0;
+  elements.nextLineButton.disabled = !loaded || state.selectedLineIndex < 0
+    || state.selectedLineIndex >= state.detections.length - 1;
 }
 
 function updateDetectionSummary() {
@@ -185,14 +190,19 @@ function renderPreview() {
   if (!state.workingImageData) return;
   const bounds = elements.canvasStage.getBoundingClientRect();
   if (!bounds.width || !bounds.height) return;
-  // Keep the fisheye and its navigation arrows above the sensitivity slider.
-  // The action column sits to the right, so it does not consume vertical space.
-  const panel = elements.controlsPanel.getBoundingClientRect();
-  const clearBottom = Math.min(bounds.height, panel.top - bounds.top - 8);
-  const focusY = Math.max(75, clearBottom / 2);
+  // Position the focus independently of the dock's top so bringing the slider
+  // to the actual image edge cannot trigger a layout feedback loop.
+  const dockHeight = elements.controlsPanel.getBoundingClientRect().height || 72;
+  const maxDockTop = Math.max(0, bounds.height - dockHeight - 8);
+  const focusY = Math.max(75, (maxDockTop - 8) / 2);
   const { width, height } = state.workingImageData;
   const layout = buildFocusLayout(width, height, bounds.width, bounds.height,
     state.detections, state.selectedLineIndex, focusY);
+  const imageBottom = mappedY(layout, height);
+  const selected = state.detections[state.selectedLineIndex];
+  const navigationBottom = selected ? focusBounds(layout, selected, height).bottom + 56 : 0;
+  const dockTop = Math.min(maxDockTop, Math.max(8, imageBottom + 6, navigationBottom));
+  elements.controlsPanel.style.top = `${dockTop}px`;
   state.previewLayout = layout;
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
   elements.previewCanvas.width = Math.round(bounds.width * pixelRatio);
@@ -239,7 +249,9 @@ function renderWorkingImage() {
 function cycleSelectedLine(direction) {
   const count = state.detections.length;
   if (!count) return;
-  state.selectedLineIndex = (state.selectedLineIndex + direction + count) % count;
+  const next = state.selectedLineIndex + direction;
+  if (next < 0 || next >= count) return;
+  state.selectedLineIndex = next;
   renderPreview();
   updateDetectionSummary();
 }
@@ -457,7 +469,7 @@ function runDetection({ announce = true } = {}) {
   renderPreview();
   updateDetectionSummary();
   if (announce) {
-    setStatus(state.detections.length ? `Horizontal: ${state.detections.length} found` : "Horizontal: none found",
+    setStatus(state.detections.length ? "Ready to inspect" : "No horizontal lines detected",
       state.detections.length ? "success" : "neutral");
   }
 }

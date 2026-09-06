@@ -8,10 +8,10 @@
       content="Remove distracting horizontal lines from an image in your browser."
     />
     <title>LineLift — remove image lines</title>
-    <link rel="stylesheet" href="styles.css?v=image-action-icons-1" />
+    <link rel="stylesheet" href="styles.css?v=image-only-workspace-1" />
   </head>
   <body>
-    <header class="topbar">
+    <header class="topbar" id="appHeader">
       <a class="brand" href="./" aria-label="LineLift home">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="none">
@@ -48,7 +48,7 @@
 
       <div class="workspace-grid">
         <section class="panel canvas-panel" aria-labelledby="workspaceHeading">
-          <div class="panel-heading">
+          <div class="panel-heading" id="workspaceHeader">
             <div>
               <p class="eyebrow">Workspace</p>
               <h2 id="workspaceHeading">No image loaded</h2>
@@ -112,28 +112,18 @@
             </div>
           </div>
 
-          <div class="canvas-footer">
-            <div class="guide-summary">
-              <span id="selectedLineStatus" role="status" aria-live="polite">No lines detected</span>
-              <span id="guideSummary" aria-live="polite">Detected lines will appear as guides</span>
-            </div>
-          </div>
-          <div class="guide-legend" aria-label="Highlight colors">
-            <span><i class="legend-line legend-selected" aria-hidden="true"></i>Zoomed area · 10× center</span>
-            <span>Preview fix shows the repair before applying it.</span>
+          <div class="sr-only">
+            <span id="selectedLineStatus" role="status" aria-live="polite">No lines detected</span>
+            <span id="guideSummary" aria-live="polite">Detected lines will appear as guides</span>
           </div>
           <p class="notice notice-error hidden" id="errorNotice" role="alert"></p>
         </section>
       </div>
 
-      <footer class="page-footer">
-        <span>LineLift keeps processing local to this browser session.</span>
-        <span class="footer-separator" aria-hidden="true"></span>
-        <span>No image is uploaded.</span>
-      </footer>
+
     </main>
 
-    <script src="app.js?v=image-action-icons-1"></script>
+    <script src="app.js?v=image-only-workspace-1"></script>
   </body>
 </html>
 
