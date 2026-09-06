@@ -10,6 +10,7 @@ const state = {
   selectedLineIndex: -1,
   previewLayout: null,
   previewRepair: false,
+  repairPlan: null,
   repairedRows: [],
   controlsVisible: true,
   controlsPosition: "bottom",
@@ -82,7 +83,7 @@ function updateControls() {
   const loaded = hasImage();
   elements.editorShell.classList.toggle("is-editing", loaded);
   elements.previewRepairButton.disabled = !loaded || state.selectedLineIndex < 0;
-  elements.previewRepairButton.textContent = state.previewRepair ? "Show original row" : "Preview fix";
+  elements.previewRepairButton.textContent = state.previewRepair ? "Show original" : "Preview fix";
   elements.previewRepairButton.setAttribute("aria-pressed", String(state.previewRepair));
   elements.removeButton.disabled = !loaded || state.detections.length === 0;
   elements.undoButton.disabled = !loaded || state.history.length === 0;
@@ -107,7 +108,8 @@ function updateDetectionSummary() {
     elements.guideSummary.textContent = "No horizontal lines detected";
     elements.selectedLineStatus.textContent = "No lines detected";
   } else {
-    elements.guideSummary.textContent = state.previewRepair ? "Previewing the fix on one pixel row. Apply with Fix selected row." : "Fisheye: one selected pixel row, with the surrounding image rows enlarged.";
+    const plan = getRepairPlan();
+    elements.guideSummary.textContent = `${state.previewRepair ? "Previewing" : "Repair covers"} rows ${plan.start + 1}–${plan.end + 1}, including color bleed. Selection stays 1 pixel high.`;
     elements.selectedLineStatus.textContent = `Row ${state.detections[state.selectedLineIndex].start + 1} · 1 px`;
   }
 
@@ -223,16 +225,18 @@ function renderPreview() {
       left, top, layout.width, bottom - top);
   }
   if (state.previewRepair && state.selectedLineIndex >= 0) {
-    const line = state.detections[state.selectedLineIndex];
-    const strip = repairedRowImage(state.workingImageData, line);
+    const plan = getRepairPlan();
     repairCanvas.width = width;
-    repairCanvas.height = 1;
-    repairContext.putImageData(strip, 0, 0);
-    const top = mappedY(layout, line.start);
-    const bottom = mappedY(layout, line.start + 1);
-    // Clear first: transparent repair pixels must replace, not blend over, the original.
-    previewContext.clearRect(left, top, layout.width, bottom - top);
-    previewContext.drawImage(repairCanvas, 0, 0, width, 1, left, top, layout.width, bottom - top);
+    repairCanvas.height = plan.pixels.height;
+    repairContext.putImageData(plan.pixels, 0, 0);
+    // Draw each source row through the same fisheye as the original image.
+    for (let row = plan.start; row <= plan.end; row += 1) {
+      const top = mappedY(layout, row);
+      const bottom = mappedY(layout, row + 1);
+      previewContext.clearRect(left, top, layout.width, bottom - top);
+      previewContext.drawImage(repairCanvas, 0, row - plan.start, width, 1,
+        left, top, layout.width, bottom - top);
+    }
   }
   drawGuides();
 }
@@ -274,6 +278,40 @@ function imageLuminance(imageData) {
   return luma;
 }
 
+// Chroma-only artifacts can be nearly invisible to a luminance detector.
+function detectColorRows(imageData, sensitivity) {
+  const { width, height, data } = imageData;
+  const candidates = new Uint8Array(height);
+  const amount = Math.max(10, Math.min(95, sensitivity)) / 100;
+  const threshold = 2 + (1 - amount) * 18;
+  const coverage = 0.1 + (1 - amount) * 0.35;
+  const samples = Math.min(width, 128);
+  if (samples < 12) return candidates;
+  for (const radius of [1, 2, 4, 8]) {
+    for (let y = 1; y < height - 1; y += 1) {
+      if (candidates[y]) continue;
+      for (const channel of [0, 2]) {
+        let positive = 0;
+        let negative = 0;
+        for (let sample = 0; sample < samples; sample += 1) {
+          const x = Math.round(sample * (width - 1) / (samples - 1));
+          const center = (y * width + x) * 4;
+          const top = (Math.max(0, y - radius) * width + x) * 4;
+          const bottom = (Math.min(height - 1, y + radius) * width + x) * 4;
+          if (Math.min(data[center + 3], data[top + 3], data[bottom + 3]) < 16) continue;
+          const value = data[center + channel] - data[center + 1];
+          const before = value - (data[top + channel] - data[top + 1]);
+          const after = value - (data[bottom + channel] - data[bottom + 1]);
+          if (before >= threshold && after >= threshold) positive += 1;
+          if (before <= -threshold && after <= -threshold) negative += 1;
+        }
+        if (Math.max(positive, negative) / samples >= coverage) candidates[y] = 1;
+      }
+    }
+  }
+  return candidates;
+}
+
 function detectLines(imageData, sensitivity, luma = imageLuminance(imageData)) {
   const { width, height } = imageData;
   const axisLength = height;
@@ -291,7 +329,7 @@ function detectLines(imageData, sensitivity, luma = imageLuminance(imageData)) {
     return cross;
   });
   const stride = width;
-  const candidates = new Uint8Array(axisLength);
+  const candidates = detectColorRows(imageData, sensitivity);
   const radii = [1, 2, 4, 8, 16, 32, maxLineWidth].filter(
     (radius, index, values) => radius <= maxLineWidth && values.indexOf(radius) === index,
   );
@@ -395,7 +433,10 @@ function runDetection({ announce = true } = {}) {
       state.selectedLineIndex = index;
     }
   });
-  if (!state.detections.length) state.previewRepair = false;
+  if (!state.detections.length) {
+    state.previewRepair = false;
+    state.repairPlan = null;
+  }
   renderPreview();
   updateDetectionSummary();
   if (announce) {
@@ -404,25 +445,66 @@ function runDetection({ announce = true } = {}) {
   }
 }
 
-function repairedRowImage(imageData, line) {
+function repairBounds(imageData, line) {
   const { width, height, data } = imageData;
-  const row = line.start;
-  // Sample outside the detected stripe, but write only the selected pixel row.
-  const top = Math.max(0, (line.bandStart ?? row) - 1);
-  const bottom = Math.min(height - 1, (line.bandEnd ?? row) + 1);
-  const proportion = bottom === top ? 0 : (row - top) / (bottom - top);
-  const strip = new ImageData(width, 1);
-  for (let x = 0; x < width; x += 1) {
-    for (let channel = 0; channel < 4; channel += 1) {
-      strip.data[x * 4 + channel] = Math.round(
-        data[(top * width + x) * 4 + channel] * (1 - proportion)
-        + data[(bottom * width + x) * 4 + channel] * proportion);
-    }
+  let start = line.bandStart ?? line.start;
+  let end = line.bandEnd ?? line.start;
+  const referenceTop = Math.max(0, start - 7);
+  const referenceBottom = Math.min(height - 1, end + 7);
+  const samples = Math.min(width, 256);
+  const stableColumns = [];
+  for (let sample = 0; sample < samples; sample += 1) {
+    const x = Math.round(sample * (width - 1) / Math.max(1, samples - 1));
+    const top = (referenceTop * width + x) * 4;
+    const bottom = (referenceBottom * width + x) * 4;
+    if (Math.min(data[top + 3], data[bottom + 3]) < 16) continue;
+    if ([0, 1, 2].every((channel) => Math.abs(data[top + channel] - data[bottom + channel]) < 32)) stableColumns.push(x);
   }
-  return strip;
+  function hasColorBleed(row) {
+    if (stableColumns.length < Math.max(8, samples * 0.1)) return false;
+    const t = (row - referenceTop) / Math.max(1, referenceBottom - referenceTop);
+    return [0, 1, 2].some((channel) => {
+      const residuals = stableColumns.map((x) => {
+        const expected = data[(referenceTop * width + x) * 4 + channel] * (1 - t)
+          + data[(referenceBottom * width + x) * 4 + channel] * t;
+        return data[(row * width + x) * 4 + channel] - expected;
+      });
+      return Math.abs(median(residuals)) > 2.5;
+    });
+  }
+  while (start > referenceTop + 1 && hasColorBleed(start - 1)) start -= 1;
+  while (end < referenceBottom - 1 && hasColorBleed(end + 1)) end += 1;
+  return { start, end };
 }
 
-function fixSelectedRow() {
+function planLineRepair(imageData, line) {
+  const { width, height, data } = imageData;
+  const { start, end } = repairBounds(imageData, line);
+  const top = Math.max(0, start - 1);
+  const bottom = Math.min(height - 1, end + 1);
+  const pixels = new ImageData(width, end - start + 1);
+  for (let row = start; row <= end; row += 1) {
+    const t = bottom === top ? 0 : (row - top) / (bottom - top);
+    for (let x = 0; x < width; x += 1) {
+      for (let channel = 0; channel < 4; channel += 1) {
+        pixels.data[((row - start) * width + x) * 4 + channel] = Math.round(
+          data[(top * width + x) * 4 + channel] * (1 - t)
+          + data[(bottom * width + x) * 4 + channel] * t);
+      }
+    }
+  }
+  return { start, end, pixels };
+}
+
+function getRepairPlan() {
+  const line = state.detections[state.selectedLineIndex];
+  const cached = state.repairPlan;
+  if (cached && cached.source === state.workingImageData && cached.line === line) return cached;
+  state.repairPlan = { ...planLineRepair(state.workingImageData, line), source: state.workingImageData, line };
+  return state.repairPlan;
+}
+
+function fixSelectedLine() {
   const line = state.detections[state.selectedLineIndex];
   if (!state.workingImageData || !line) return;
   state.history.push({
@@ -432,15 +514,15 @@ function fixSelectedRow() {
     repairedRows: state.repairedRows.slice(),
     sensitivity: elements.sensitivity.value,
   });
-  const strip = repairedRowImage(state.workingImageData, line);
+  const plan = getRepairPlan();
   const cleaned = cloneImageData(state.workingImageData);
-  cleaned.data.set(strip.data, line.start * cleaned.width * 4);
+  cleaned.data.set(plan.pixels.data, plan.start * cleaned.width * 4);
   state.workingImageData = cleaned;
-  state.repairedRows.push(line.start);
+  for (let row = plan.start; row <= plan.end; row += 1) state.repairedRows.push(row);
   state.previewRepair = false;
   renderWorkingImage();
   runDetection({ announce: false });
-  setStatus(`Fixed row ${line.start + 1} · 1 pixel high`, "success");
+  setStatus(`Fixed line and color bleed · rows ${plan.start + 1}–${plan.end + 1}`, "success");
 }
 
 function toggleRepairPreview() {
@@ -586,7 +668,7 @@ elements.fileInput.addEventListener("change", (event) => {
 elements.previousLineButton.addEventListener("click", () => cycleSelectedLine(-1));
 elements.nextLineButton.addEventListener("click", () => cycleSelectedLine(1));
 elements.previewRepairButton.addEventListener("click", toggleRepairPreview);
-elements.removeButton.addEventListener("click", fixSelectedRow);
+elements.removeButton.addEventListener("click", fixSelectedLine);
 elements.undoButton.addEventListener("click", undoLastEdit);
 elements.resetButton.addEventListener("click", resetImage);
 elements.downloadButton.addEventListener("click", downloadImage);

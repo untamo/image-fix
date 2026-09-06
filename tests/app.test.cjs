@@ -167,10 +167,8 @@ test("detects and removes thin/thick light and dark horizontal lines", () => {
       const lines = app.context.detectLines(image, 60);
       assert.equal(lines.length, 1, `${thickness}/${ink}`);
       assert.equal(lines[0].width, thickness);
-      for (let row = lines[0].start; row <= lines[0].end; row += 1) {
-        const strip = app.context.repairedRowImage(image, { start: row, bandStart: lines[0].start, bandEnd: lines[0].end });
-        image.data.set(strip.data, row * image.width * 4);
-      }
+      const plan = app.context.planLineRepair(image, { start: lines[0].start, bandStart: lines[0].start, bandEnd: lines[0].end });
+      image.data.set(plan.pixels.data, plan.start * image.width * 4);
       assert.ok(cleanBackground(image));
     }
   }
@@ -327,7 +325,7 @@ test("HTML has selection buttons, no direction/highlight switches, and matching 
   assert.match(html, /id="previousLineButton"/);
   assert.match(html, /id="nextLineButton"/);
   assert.match(html, /id="previewRepairButton"/);
-  assert.match(html, /Fix selected row/);
+  assert.match(html, /Fix line/);
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(new Set(ids).size, ids.length);
   const assets = [...html.matchAll(/(?:src|href)="((?:app\.js|styles\.css)[^"]*)"/g)].map((match) => match[1]);
@@ -336,7 +334,7 @@ test("HTML has selection buttons, no direction/highlight switches, and matching 
   for (const asset of assets) assert.ok(fs.existsSync(path.join(root, asset.split("?")[0])));
 });
 
-test("thick detections split into one-pixel selections and only the selected row is fixed", () => {
+test("one-pixel selection repairs the full detected stripe and preserves all surrounding pixels", () => {
   const app = harness();
   app.load(fixture("horizontal", 8));
   assert.equal(app.state.detections.length, 8);
@@ -350,7 +348,7 @@ test("thick detections split into one-pixel selections and only the selected row
   app.nodes.get("removeButton").click();
   for (let y = 0; y < 200; y += 1) {
     const row = app.state.workingImageData.data.slice(y * 300 * 4, (y + 1) * 300 * 4);
-    if (y === selectedRow) assert.ok(row.every((value, index) => value === (index % 4 === 3 ? 255 : 160)));
+    if (y >= 90 && y < 98) assert.ok(row.every((value, index) => value === (index % 4 === 3 ? 255 : 160)));
     else assert.deepEqual(row, original.slice(y * 300 * 4, (y + 1) * 300 * 4));
   }
   assert.ok(!app.state.detections.some((line) => line.start === selectedRow));
@@ -384,4 +382,66 @@ test("Preview fix is reversible and its single-row pixels exactly match the appl
   assert.ok(app.nodes.get("previewRepairButton").disabled);
   app.nodes.get("undoButton").click();
   assert.deepEqual(app.state.workingImageData.data, original);
+});
+
+function colorBleedFixture() {
+  const image = fixture("horizontal", 0);
+  for (let pixel = 0; pixel < image.data.length; pixel += 4) image.data.set([125, 61, 20, 255], pixel);
+  // Bright core with a faint, several-row chroma halo, as in the reported JPEG.
+  const colors = [[123, 62, 31], [121, 58, 37], [158, 92, 77], [121, 56, 37], [123, 59, 26]];
+  colors.forEach((rgb, offset) => {
+    for (let x = 0; x < image.width; x += 1) image.data.set([...rgb, 255], ((88 + offset) * image.width + x) * 4);
+  });
+  return image;
+}
+
+test("repair includes the JPEG color halo and samples beyond all contaminated rows", () => {
+  const app = harness();
+  const image = colorBleedFixture();
+  // Even a detector that only found the bright center must repair its halo.
+  const plan = app.context.planLineRepair(image, { start: 90, bandStart: 90, bandEnd: 90 });
+  assert.equal(plan.start, 88);
+  assert.equal(plan.end, 92);
+  for (let pixel = 0; pixel < plan.pixels.data.length; pixel += 4) {
+    assert.deepEqual(Array.from(plan.pixels.data.slice(pixel, pixel + 4)), [125, 61, 20, 255]);
+  }
+});
+
+test("multi-row preview and apply use identical repair pixels and Undo restores the complete halo", () => {
+  const app = harness();
+  app.load(colorBleedFixture());
+  const original = app.state.workingImageData.data.slice();
+  const plan = app.context.getRepairPlan();
+  assert.equal(plan.pixels.height, 5);
+  app.nodes.get("previewRepairButton").click();
+  const previewStrip = app.canvases[1].context.calls.find((call) => call.method === "putImageData").args[0];
+  assert.deepEqual(previewStrip.data, plan.pixels.data);
+  assert.deepEqual(app.state.workingImageData.data, original);
+  const draws = app.nodes.get("previewCanvas").context.calls.filter((call) => call.method === "drawImage" && call.args[0] === app.canvases[1]);
+  assert.equal(draws.length, 5);
+  draws.forEach((call, index) => {
+    assert.equal(call.args[2], index);
+    assert.equal(call.args[4], 1);
+    const layout = app.state.previewLayout;
+    near(call.args[8], app.context.mappedY(layout, plan.start + index + 1) - app.context.mappedY(layout, plan.start + index));
+  });
+  app.nodes.get("removeButton").click();
+  const start = plan.start * 300 * 4;
+  const end = (plan.end + 1) * 300 * 4;
+  assert.deepEqual(app.state.workingImageData.data.slice(start, end), previewStrip.data);
+  assert.deepEqual(app.state.workingImageData.data.slice(0, start), original.slice(0, start));
+  assert.deepEqual(app.state.workingImageData.data.slice(end), original.slice(end));
+  assert.equal(app.state.selectedLineIndex, -1);
+  app.nodes.get("undoButton").click();
+  assert.deepEqual(app.state.workingImageData.data, original);
+});
+
+test("color-only horizontal damage is detected even at near-equal luminance", () => {
+  const app = harness();
+  const image = fixture("horizontal", 0);
+  for (let x = 0; x < image.width; x += 1) image.data.set([190, 148, 190, 255], (90 * image.width + x) * 4);
+  assert.ok(Math.abs(app.context.luminance(190, 148, 190) - 160) < 1);
+  const lines = app.context.detectLines(image, 60);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].start, 90);
 });
