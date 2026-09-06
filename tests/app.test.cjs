@@ -337,7 +337,9 @@ test("HTML has selection buttons, no direction/highlight switches, and matching 
 test("one-pixel selection repairs the full detected stripe and preserves all surrounding pixels", () => {
   const app = harness();
   app.load(fixture("horizontal", 8));
-  assert.equal(app.state.detections.length, 8);
+  assert.equal(app.state.detections.length, 1);
+  assert.ok(app.nodes.get("previousLineButton").disabled);
+  assert.ok(app.nodes.get("nextLineButton").disabled);
   for (const line of app.state.detections) {
     assert.equal(line.width, 1);
     assert.equal(line.start, line.end);

@@ -413,17 +413,48 @@ function mergeNearbyLines(lines, axisLength, maxLineWidth) {
   return merged;
 }
 
+function selectStripeRow(imageData, band, repaired = new Set()) {
+  const { width, height, data } = imageData;
+  const top = Math.max(0, band.start - 1);
+  const bottom = Math.min(height - 1, band.end + 1);
+  const center = (band.start + band.end) / 2;
+  const samples = Math.min(width, 64);
+  let selected = null;
+  let bestScore = -1;
+  // Each detected stripe gets one one-pixel focus row: its strongest defect.
+  // Equally strong rows resolve toward the stripe's center.
+  for (let row = band.start; row <= band.end; row += 1) {
+    if (repaired.has(row)) continue;
+    const t = (row - top) / Math.max(1, bottom - top);
+    let score = 0;
+    for (let sample = 0; sample < samples; sample += 1) {
+      const x = Math.round(sample * (width - 1) / Math.max(1, samples - 1));
+      if (Math.min(data[(row * width + x) * 4 + 3], data[(top * width + x) * 4 + 3], data[(bottom * width + x) * 4 + 3]) < 16) continue;
+      for (let channel = 0; channel < 3; channel += 1) {
+        const expected = data[(top * width + x) * 4 + channel] * (1 - t)
+          + data[(bottom * width + x) * 4 + channel] * t;
+        score += Math.abs(data[(row * width + x) * 4 + channel] - expected);
+      }
+    }
+    if (score > bestScore || (score === bestScore && Math.abs(row - center) < Math.abs(selected - center))) {
+      selected = row;
+      bestScore = score;
+    }
+  }
+  return selected === null ? null : {
+    start: selected, end: selected, width: 1, bandStart: band.start, bandEnd: band.end,
+  };
+}
+
 function runDetection({ announce = true } = {}) {
   if (!state.workingImageData) return;
   const sensitivity = Number(elements.sensitivity.value);
   const previous = state.detections[state.selectedLineIndex];
   const anchor = previous ? previous.start + previous.width / 2 : 0;
   const repaired = new Set(state.repairedRows);
-  state.detections = detectLines(state.workingImageData, sensitivity).flatMap((band) =>
-    Array.from({ length: band.width }, (_, offset) => ({
-      start: band.start + offset, end: band.start + offset, width: 1,
-      bandStart: band.start, bandEnd: band.end,
-    })).filter((line) => !repaired.has(line.start)));
+  state.detections = detectLines(state.workingImageData, sensitivity)
+    .map((band) => selectStripeRow(state.workingImageData, band, repaired))
+    .filter(Boolean);
 
   state.selectedLineIndex = state.detections.length ? 0 : -1;
   // Keep the closest line selected as sensitivity or image pixels change.
