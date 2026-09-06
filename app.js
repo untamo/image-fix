@@ -39,9 +39,6 @@ const elements = {
   errorNotice: document.querySelector("#errorNotice"),
   sensitivity: document.querySelector("#sensitivity"),
   sensitivityValue: document.querySelector("#sensitivityValue"),
-  lineCount: document.querySelector("#lineCount"),
-  lineCoverage: document.querySelector("#lineCoverage"),
-  detectionStatus: document.querySelector("#detectionStatus"),
   previewRepairButton: document.querySelector("#previewRepairButton"),
   removeButton: document.querySelector("#removeButton"),
   removeButtonLabel: document.querySelector("#removeButtonLabel"),
@@ -77,11 +74,6 @@ function setError(message = "") {
   }
 }
 
-function setDetectionStatus(message, tone = "neutral") {
-  elements.detectionStatus.textContent = message;
-  elements.detectionStatus.dataset.tone = tone;
-}
-
 function hasImage() {
   return Boolean(state.workingImageData);
 }
@@ -102,27 +94,21 @@ function updateControls() {
 
 function updateDetectionSummary() {
   const count = state.detections.length;
-  elements.lineCount.textContent = String(count);
 
   if (!hasImage()) {
-    elements.lineCoverage.textContent = "Upload an image to begin detection.";
     elements.guideSummary.textContent = "Detected lines will appear as guides";
     elements.selectedLineStatus.textContent = "No lines detected";
-    setDetectionStatus("Waiting");
+
     updateControls();
     return;
   }
 
   if (count === 0) {
-    elements.lineCoverage.textContent = "No horizontal lines found at this sensitivity.";
     elements.guideSummary.textContent = "No horizontal lines detected";
     elements.selectedLineStatus.textContent = "No lines detected";
-    setDetectionStatus("None found");
   } else {
-    elements.lineCoverage.textContent = `${count} candidate pixel row${count === 1 ? "" : "s"}. Fix changes only the selected row.`;
     elements.guideSummary.textContent = state.previewRepair ? "Previewing the fix on one pixel row. Apply with Fix selected row." : "Fisheye: one selected pixel row, with the surrounding image rows enlarged.";
     elements.selectedLineStatus.textContent = `Row ${state.detections[state.selectedLineIndex].start + 1} · 1 px`;
-    setDetectionStatus("Review", "success");
   }
 
   updateControls();

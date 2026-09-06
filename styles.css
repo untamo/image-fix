@@ -468,8 +468,7 @@ h1 {
 }
 
 .control-label-row,
-.range-labels,
-.detection-card-top {
+.range-labels {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -576,48 +575,6 @@ input[type="range"] {
   color: var(--muted);
   font-size: 0.77rem;
   line-height: 1.5;
-}
-
-.detection-card {
-  margin: 0 26px 20px;
-  padding: 17px;
-  background: rgba(255, 255, 255, 0.032);
-  border: 1px solid var(--border);
-  border-radius: 13px;
-}
-
-.metric-label {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--muted);
-  font-size: 0.71rem;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.detection-card strong {
-  display: block;
-  font-size: 1.85rem;
-  font-weight: 640;
-  letter-spacing: -0.06em;
-}
-
-.metric-status {
-  align-self: flex-start;
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.metric-status[data-tone="success"] {
-  color: var(--accent);
-}
-
-.detection-card p {
-  margin: 9px 0 0;
-  color: var(--muted);
-  font-size: 0.76rem;
-  line-height: 1.45;
 }
 
 .control-actions {
@@ -766,10 +723,6 @@ input[type="range"] {
     grid-column: 1 / -1;
   }
 
-  .controls-panel .detection-card {
-    margin-top: 0;
-  }
-
   .controls-panel .control-actions {
     align-self: center;
     padding-right: 26px;
@@ -860,11 +813,6 @@ input[type="range"] {
     padding: 21px 18px 17px;
   }
 
-  .detection-card {
-    margin-right: 18px;
-    margin-left: 18px;
-  }
-
   .control-actions {
     padding: 0 18px;
   }
@@ -947,12 +895,6 @@ input[type="range"] {
 .controls-panel .segmented-control { margin-top: 8px; }
 .controls-panel input[type="range"] { min-height: 44px; margin: 8px 0 0; }
 .controls-panel .range-labels { font-size: 0.75rem; }
-.canvas-area .controls-panel .detection-card { grid-column: 1 / -1; margin: 0; padding: 8px 12px; }
-.controls-panel .detection-card-top > div { display: flex; align-items: center; gap: 10px; }
-.controls-panel .metric-label { margin: 0; font-size: 0.75rem; }
-.controls-panel .detection-card strong { font-size: 1.125rem; }
-.controls-panel .metric-status { align-self: center; font-size: 0.75rem; }
-.controls-panel .detection-card p { margin-top: 2px; font-size: 0.875rem; }
 .canvas-area .controls-panel .control-actions { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0; }
 .controls-panel .button { font-size: 0.875rem; line-height: 1.3; }
 .panel-heading > div:first-child { min-width: 0; }
@@ -964,7 +906,6 @@ input[type="range"] {
   .controls-panel .direction-option > span { min-height: 44px; }
   .controls-panel .range-labels { display: none; }
   .controls-panel input[type="range"] { margin-top: 0; }
-  .controls-panel .detection-card p { font-size: 0.75rem; }
   .editor-toolbar .button { padding: 8px; }
   .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 0; }
   .topbar-actions { flex-wrap: wrap; gap: 6px; }
