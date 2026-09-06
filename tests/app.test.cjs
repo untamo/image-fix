@@ -27,7 +27,7 @@ function harness() {
     const calls = [];
     const context = { calls };
     for (const method of ["setTransform", "clearRect", "fillRect", "beginPath", "moveTo", "lineTo", "stroke", "putImageData", "drawImage"]) {
-      context[method] = (...args) => calls.push({ method, args, lineWidth: context.lineWidth, fillStyle: context.fillStyle });
+      context[method] = (...args) => calls.push({ method, args, lineWidth: context.lineWidth, fillStyle: context.fillStyle, strokeStyle: context.strokeStyle });
     }
     return {
       value: "", checked: false, textContent: "", disabled: false, dataset: {},
@@ -68,6 +68,8 @@ function harness() {
       context.testState.workingImageData = context.cloneImageData(image);
       context.testState.history = [];
       context.testState.detections = [];
+      context.testState.repairedRows = [];
+      context.testState.previewRepair = false;
       context.testState.selectedLineIndex = -1;
       context.renderWorkingImage();
       context.runDetection();
@@ -75,7 +77,7 @@ function harness() {
   };
 }
 
-function fixture(orientation, thickness = 3, ink = 20, width = 300, height = 200) {
+function fixture(orientation, thickness = 1, ink = 20, width = 300, height = 200) {
   const image = new ImageDataStub(width, height);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -97,7 +99,7 @@ function cleanBackground(image) {
 function multipleLines(positions = [20, 45, 70, 95, 120, 145, 170], faint = -1) {
   const image = fixture("horizontal", 0);
   positions.forEach((y, index) => {
-    for (let row = y; row < y + 2; row += 1) {
+    for (let row = y; row < y + 1; row += 1) {
       for (let x = 0; x < image.width; x += 1) {
         const pixel = (row * image.width + x) * 4;
         image.data.fill(index === faint ? 151 : 20, pixel, pixel + 3);
@@ -118,7 +120,7 @@ test("empty and single-line images have valid selection and safe navigation", ()
   app.context.cycleSelectedLine(1);
   app.load(fixture("horizontal"));
   assert.equal(app.state.selectedLineIndex, 0);
-  assert.equal(app.nodes.get("selectedLineStatus").textContent, "Line 1 / 1 · 5×");
+  assert.equal(app.nodes.get("selectedLineStatus").textContent, "Row 91 · 1 px");
   assert.ok(app.nodes.get("nextLineButton").disabled);
   app.context.cycleSelectedLine(-1);
   assert.equal(app.state.selectedLineIndex, 0);
@@ -165,23 +167,26 @@ test("detects and removes thin/thick light and dark horizontal lines", () => {
       const lines = app.context.detectLines(image, 60);
       assert.equal(lines.length, 1, `${thickness}/${ink}`);
       assert.equal(lines[0].width, thickness);
-      app.context.interpolateDetectedLine(image.data, image.width, image.height, lines[0]);
+      for (let row = lines[0].start; row <= lines[0].end; row += 1) {
+        const strip = app.context.repairedRowImage(image, { start: row, bandStart: lines[0].start, bandEnd: lines[0].end });
+        image.data.set(strip.data, row * image.width * 4);
+      }
       assert.ok(cleanBackground(image));
     }
   }
 });
 
-test("magnification is exactly 5,4,3,2,1 times baseline with continuous bands", () => {
+test("fisheye depends on source-row distance even with no nearby detections", () => {
   const app = harness();
-  const lines = Array.from({ length: 11 }, (_, index) => ({ start: index * 18, end: index * 18 + 2, width: 3 }));
   for (const [width, height] of [[300, 200], [150, 100], [900, 600]]) {
-    for (const selected of [0, 5, 10]) {
-      const layout = app.context.buildFocusLayout(300, 200, width, height, lines, selected);
-      lines.forEach((line, index) => {
-        const actual = app.context.mappedY(layout, line.end + 1) - app.context.mappedY(layout, line.start);
-        near(actual / (line.width * layout.scale), Math.max(1, 5 - Math.abs(index - selected)));
-      });
-      near(app.context.mappedY(layout, lines[selected].start + 1.5), height / 2);
+    for (const row of [0, 100, 199]) {
+      const lines = [{ start: row, end: row, width: 1 }];
+      const layout = app.context.buildFocusLayout(300, 200, width, height, lines, 0);
+      for (let y = 0; y < 200; y += 1) {
+        const actual = app.context.mappedY(layout, y + 1) - app.context.mappedY(layout, y);
+        near(actual, Math.abs(y - row) <= 4 ? 5 - Math.abs(y - row) : layout.scale);
+      }
+      near(app.context.mappedY(layout, row + 0.5), height / 2);
       assert.equal(layout.segments[0].start, 0);
       assert.equal(layout.segments.at(-1).end, 200);
       layout.segments.forEach((part, index) => {
@@ -191,6 +196,11 @@ test("magnification is exactly 5,4,3,2,1 times baseline with continuous bands", 
           near(layout.segments[index - 1].bottom, part.top);
         }
       });
+      // An unrelated detection does not enlarge any extra image band.
+      const otherRow = row < 100 ? 150 : 20;
+      const withOther = app.context.buildFocusLayout(300, 200, width, height,
+        [lines[0], { start: otherRow, end: otherRow, width: 1 }], 0);
+      assert.deepEqual(withOther.segments, layout.segments);
     }
   }
 });
@@ -204,7 +214,7 @@ test("actual image rendering expands source bands and guides follow their mapped
   app.context.renderPreview();
   const draws = preview.context.calls.filter((call) => call.method === "drawImage");
   assert.ok(draws.length > 1);
-  assert.ok(draws.some((call) => Math.abs(call.args[8] / call.args[4] - 5 * app.state.previewLayout.scale) < 1e-7));
+  assert.ok(draws.some((call) => Math.abs(call.args[8] / call.args[4] - 5) < 1e-7));
   draws.forEach((call) => {
     assert.equal(call.args[0], app.canvases[0]);
     assert.ok(call.args[2] >= 0 && call.args[2] + call.args[4] <= 200 + 1e-7);
@@ -212,10 +222,11 @@ test("actual image rendering expands source bands and guides follow their mapped
   const guide = app.nodes.get("guideCanvas");
   guide.context.calls.length = 0;
   app.context.drawGuides();
-  const selectedFill = guide.context.calls.find((call) => call.method === "fillRect" && call.fillStyle === "rgba(194, 245, 109, 0.18)");
+  const selectedMarker = guide.context.calls.find((call) => call.method === "fillRect" && call.fillStyle === "#c2f56d");
   const line = app.state.detections[app.state.selectedLineIndex];
-  near(selectedFill.args[1], app.context.mappedY(app.state.previewLayout, line.start));
-  near(selectedFill.args[3], 5 * line.width * app.state.previewLayout.scale);
+  near(selectedMarker.args[1] + 5, app.context.mappedY(app.state.previewLayout, line.start + 0.5));
+  near(app.context.mappedY(app.state.previewLayout, line.start + 1) - app.context.mappedY(app.state.previewLayout, line.start), 5);
+  assert.ok(!guide.context.calls.some((call) => call.method === "fillRect" && call.fillStyle === "rgba(194, 245, 109, 0.18)"));
 });
 
 test("sensitivity preserves the closest selected line when earlier faint lines disappear", () => {
@@ -238,8 +249,8 @@ test("Undo restores pixels, sensitivity, selection and magnification; Reset rest
   const original = app.state.workingImageData.data.slice();
   app.nodes.get("nextLineButton").click();
   app.nodes.get("removeButton").click();
-  assert.ok(cleanBackground(app.state.workingImageData));
-  assert.equal(app.state.selectedLineIndex, -1);
+  assert.notDeepEqual(app.state.workingImageData.data, original);
+  assert.equal(app.state.repairedRows.length, 1);
   app.nodes.get("sensitivity").value = "95";
   app.nodes.get("undoButton").click();
   assert.equal(app.state.selectedLineIndex, 1);
@@ -270,6 +281,7 @@ test("export contains original-size image pixels without highlights or magnifica
   const app = harness();
   app.load(multipleLines());
   app.nodes.get("nextLineButton").click();
+  app.nodes.get("previewRepairButton").click();
   app.nodes.get("downloadButton").click();
   const exported = app.canvases.at(-1);
   assert.equal(exported.width, 300);
@@ -298,10 +310,62 @@ test("HTML has selection buttons, no direction/highlight switches, and matching 
   assert.doesNotMatch(html, /name="orientation"|toggleGuidesButton|Hide guides|Vertical/);
   assert.match(html, /id="previousLineButton"/);
   assert.match(html, /id="nextLineButton"/);
+  assert.match(html, /id="previewRepairButton"/);
+  assert.match(html, /Fix selected row/);
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(new Set(ids).size, ids.length);
   const assets = [...html.matchAll(/(?:src|href)="((?:app\.js|styles\.css)[^"]*)"/g)].map((match) => match[1]);
   assert.equal(assets.length, 2);
   assert.equal(assets[0].split("?")[1], assets[1].split("?")[1]);
   for (const asset of assets) assert.ok(fs.existsSync(path.join(root, asset.split("?")[0])));
+});
+
+test("thick detections split into one-pixel selections and only the selected row is fixed", () => {
+  const app = harness();
+  app.load(fixture("horizontal", 8));
+  assert.equal(app.state.detections.length, 8);
+  for (const line of app.state.detections) {
+    assert.equal(line.width, 1);
+    assert.equal(line.start, line.end);
+  }
+  app.nodes.get("nextLineButton").click();
+  const selectedRow = app.state.detections[app.state.selectedLineIndex].start;
+  const original = app.state.workingImageData.data.slice();
+  app.nodes.get("removeButton").click();
+  for (let y = 0; y < 200; y += 1) {
+    const row = app.state.workingImageData.data.slice(y * 300 * 4, (y + 1) * 300 * 4);
+    if (y === selectedRow) assert.ok(row.every((value, index) => value === (index % 4 === 3 ? 255 : 160)));
+    else assert.deepEqual(row, original.slice(y * 300 * 4, (y + 1) * 300 * 4));
+  }
+  assert.ok(!app.state.detections.some((line) => line.start === selectedRow));
+  app.nodes.get("sensitivity").value = "95";
+  app.nodes.get("sensitivity").fire("input");
+  assert.ok(!app.state.detections.some((line) => line.start === selectedRow));
+  app.nodes.get("undoButton").click();
+  assert.equal(app.state.repairedRows.length, 0);
+  assert.equal(app.state.detections[app.state.selectedLineIndex].start, selectedRow);
+  assert.deepEqual(app.state.workingImageData.data, original);
+});
+
+test("Preview fix is reversible and its single-row pixels exactly match the applied repair", () => {
+  const app = harness();
+  app.load(fixture("horizontal", 1));
+  const original = app.state.workingImageData.data.slice();
+  const selectedRow = app.state.detections[app.state.selectedLineIndex].start;
+  app.nodes.get("previewRepairButton").click();
+  assert.ok(app.state.previewRepair);
+  assert.equal(app.nodes.get("previewRepairButton").attributes["aria-pressed"], "true");
+  assert.deepEqual(app.state.workingImageData.data, original);
+  assert.equal(app.state.history.length, 0);
+  const repair = app.canvases[1];
+  assert.equal(repair.height, 1);
+  const previewStrip = repair.context.calls.find((call) => call.method === "putImageData").args[0].data.slice();
+  app.nodes.get("previewRepairButton").click();
+  assert.equal(app.state.previewRepair, false);
+  app.nodes.get("removeButton").click();
+  assert.deepEqual(app.state.workingImageData.data.slice(selectedRow * 300 * 4, (selectedRow + 1) * 300 * 4), previewStrip);
+  assert.equal(app.state.selectedLineIndex, -1);
+  assert.ok(app.nodes.get("previewRepairButton").disabled);
+  app.nodes.get("undoButton").click();
+  assert.deepEqual(app.state.workingImageData.data, original);
 });

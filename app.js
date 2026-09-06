@@ -9,6 +9,8 @@ const state = {
   fileBaseName: "cleaned-image",
   selectedLineIndex: -1,
   previewLayout: null,
+  previewRepair: false,
+  repairedRows: [],
   controlsVisible: true,
   controlsPosition: "bottom",
 };
@@ -39,8 +41,7 @@ const elements = {
   lineCount: document.querySelector("#lineCount"),
   lineCoverage: document.querySelector("#lineCoverage"),
   detectionStatus: document.querySelector("#detectionStatus"),
-  detectButton: document.querySelector("#detectButton"),
-  detectButtonLabel: document.querySelector("#detectButtonLabel"),
+  previewRepairButton: document.querySelector("#previewRepairButton"),
   removeButton: document.querySelector("#removeButton"),
   removeButtonLabel: document.querySelector("#removeButtonLabel"),
   undoButton: document.querySelector("#undoButton"),
@@ -53,6 +54,8 @@ const guideContext = elements.guideCanvas.getContext("2d");
 // Keep original-resolution pixels separate from the magnified display.
 const imageCanvas = document.createElement("canvas");
 const imageContext = imageCanvas.getContext("2d", { willReadFrequently: true });
+const repairCanvas = document.createElement("canvas");
+const repairContext = repairCanvas.getContext("2d");
 
 function cloneImageData(imageData) {
   const copy = new ImageData(imageData.width, imageData.height);
@@ -85,7 +88,9 @@ function hasImage() {
 function updateControls() {
   const loaded = hasImage();
   elements.editorShell.classList.toggle("is-editing", loaded);
-  elements.detectButton.disabled = !loaded;
+  elements.previewRepairButton.disabled = !loaded || state.selectedLineIndex < 0;
+  elements.previewRepairButton.textContent = state.previewRepair ? "Show original row" : "Preview fix";
+  elements.previewRepairButton.setAttribute("aria-pressed", String(state.previewRepair));
   elements.removeButton.disabled = !loaded || state.detections.length === 0;
   elements.undoButton.disabled = !loaded || state.history.length === 0;
   elements.resetButton.disabled = !loaded;
@@ -113,55 +118,53 @@ function updateDetectionSummary() {
     elements.selectedLineStatus.textContent = "No lines detected";
     setDetectionStatus("None found");
   } else {
-    elements.lineCoverage.textContent = `${count} horizontal line${count === 1 ? "" : "s"} highlighted. Review before removing.`;
-    elements.guideSummary.textContent = "Selected line: 5×. Nearby lines taper to normal size.";
-    elements.selectedLineStatus.textContent = `Line ${state.selectedLineIndex + 1} / ${count} · 5×`;
+    elements.lineCoverage.textContent = `${count} candidate pixel row${count === 1 ? "" : "s"}. Fix changes only the selected row.`;
+    elements.guideSummary.textContent = state.previewRepair ? "Previewing the fix on one pixel row. Apply with Fix selected row." : "Fisheye: one selected pixel row, with the surrounding image rows enlarged.";
+    elements.selectedLineStatus.textContent = `Row ${state.detections[state.selectedLineIndex].start + 1} · 1 px`;
     setDetectionStatus("Review", "success");
   }
 
   updateControls();
 }
 
-// Build a continuous piecewise mapping: real image bands grow vertically,
-// while untouched gaps stay at the normal fit-to-workspace scale.
+// A one-dimensional fisheye centered on one source pixel row. Its profile
+// depends only on distance from that row, never on neighboring detections.
 function buildFocusLayout(width, height, viewWidth, viewHeight, lines, selectedIndex, focusY = viewHeight / 2) {
   const scale = Math.min(viewWidth / width, viewHeight / height, 1);
   const segments = [];
   let sourceY = 0;
   let displayY = 0;
-  function append(end, factor) {
+  function append(end, pixelsPerRow, factor = 1) {
     if (end <= sourceY) return;
-    const displayHeight = (end - sourceY) * scale * factor;
-    segments.push({ start: sourceY, end, top: displayY, bottom: displayY + displayHeight, factor });
+    const displayHeight = (end - sourceY) * pixelsPerRow;
+    segments.push({ start: sourceY, end, top: displayY, bottom: displayY + displayHeight, factor, pixelsPerRow });
     sourceY = end;
     displayY += displayHeight;
   }
-  lines.forEach((line, index) => {
-    const factor = Math.max(1, 5 - Math.abs(index - selectedIndex));
-    if (factor === 1 || selectedIndex < 0) return;
-    // Include eight display pixels of context on each side, bounded by
-    // neighboring midpoints so even tightly spaced bands cannot overlap.
-    const previous = lines[index - 1];
-    const next = lines[index + 1];
-    const start = Math.max(0, line.start - 8 / scale,
-      previous ? (previous.end + 1 + line.start) / 2 : 0);
-    const end = Math.min(height, line.end + 1 + 8 / scale,
-      next ? (line.end + 1 + next.start) / 2 : height);
-    append(start, 1);
-    append(end, factor);
-  });
-  append(height, 1);
-  const layout = { segments, scale, width: width * scale, viewWidth, viewHeight, offset: 0 };
   const selected = lines[selectedIndex];
+  if (selected) {
+    const row = selected.start;
+    const first = Math.max(0, row - 4);
+    const last = Math.min(height - 1, row + 4);
+    append(first, scale);
+    for (let y = first; y <= last; y += 1) {
+      const factor = 5 - Math.abs(y - row);
+      // The lens uses native-size pixels even if the overview is downscaled,
+      // so the selected one-pixel row remains five CSS pixels high on phones.
+      append(y + 1, factor, factor);
+    }
+  }
+  append(height, scale);
+  const layout = { segments, scale, width: width * scale, viewWidth, viewHeight, offset: 0 };
   layout.offset = selected
-    ? focusY - mappedY(layout, selected.start + selected.width / 2)
+    ? focusY - mappedY(layout, selected.start + 0.5)
     : (viewHeight - displayY) / 2;
   return layout;
 }
 
 function mappedY(layout, sourceY) {
   const segment = layout.segments.find((part) => sourceY <= part.end) || layout.segments.at(-1);
-  return segment.top + (sourceY - segment.start) * layout.scale * segment.factor + layout.offset;
+  return segment.top + (sourceY - segment.start) * segment.pixelsPerRow + layout.offset;
 }
 
 function drawGuides() {
@@ -179,15 +182,18 @@ function drawGuides() {
     const selected = index === state.selectedLineIndex;
     const color = selected ? "#c2f56d" : "#67d3ff";
     const bandHeight = mappedY(layout, line.end + 1) - mappedY(layout, line.start);
-    guideContext.fillStyle = selected ? "rgba(194, 245, 109, 0.18)" : "rgba(103, 211, 255, 0.12)";
-    guideContext.fillRect(left, center - bandHeight / 2, layout.width, bandHeight);
+    // Leave the selected pixel row untinted so its original/fixed colors can be compared.
+    if (!selected) {
+      guideContext.fillStyle = "rgba(103, 211, 255, 0.12)";
+      guideContext.fillRect(left, center - bandHeight / 2, layout.width, bandHeight);
+    }
     // Outline the band rather than covering the pixels being inspected.
     for (const edge of [center - bandHeight / 2, center + bandHeight / 2]) {
       guideContext.beginPath();
       guideContext.moveTo(left, edge);
       guideContext.lineTo(left + layout.width, edge);
       guideContext.strokeStyle = "rgba(5, 8, 12, 0.95)";
-      guideContext.lineWidth = selected ? 3 : 2;
+      guideContext.lineWidth = 1;
       guideContext.stroke();
       guideContext.strokeStyle = color;
       guideContext.lineWidth = 1;
@@ -228,10 +234,22 @@ function renderPreview() {
     const top = Math.max(0, part.top + layout.offset);
     const bottom = Math.min(bounds.height, part.bottom + layout.offset);
     if (bottom <= top) continue;
-    const sourceTop = part.start + (top - part.top - layout.offset) / (layout.scale * part.factor);
-    const sourceHeight = (bottom - top) / (layout.scale * part.factor);
+    const sourceTop = part.start + (top - part.top - layout.offset) / part.pixelsPerRow;
+    const sourceHeight = (bottom - top) / part.pixelsPerRow;
     previewContext.drawImage(imageCanvas, 0, sourceTop, width, sourceHeight,
       left, top, layout.width, bottom - top);
+  }
+  if (state.previewRepair && state.selectedLineIndex >= 0) {
+    const line = state.detections[state.selectedLineIndex];
+    const strip = repairedRowImage(state.workingImageData, line);
+    repairCanvas.width = width;
+    repairCanvas.height = 1;
+    repairContext.putImageData(strip, 0, 0);
+    const top = mappedY(layout, line.start);
+    const bottom = mappedY(layout, line.start + 1);
+    // Clear first: transparent repair pixels must replace, not blend over, the original.
+    previewContext.clearRect(left, top, layout.width, bottom - top);
+    previewContext.drawImage(repairCanvas, 0, 0, width, 1, left, top, layout.width, bottom - top);
   }
   drawGuides();
 }
@@ -379,7 +397,13 @@ function runDetection({ announce = true } = {}) {
   const sensitivity = Number(elements.sensitivity.value);
   const previous = state.detections[state.selectedLineIndex];
   const anchor = previous ? previous.start + previous.width / 2 : 0;
-  state.detections = detectLines(state.workingImageData, sensitivity);
+  const repaired = new Set(state.repairedRows);
+  state.detections = detectLines(state.workingImageData, sensitivity).flatMap((band) =>
+    Array.from({ length: band.width }, (_, offset) => ({
+      start: band.start + offset, end: band.start + offset, width: 1,
+      bandStart: band.start, bandEnd: band.end,
+    })).filter((line) => !repaired.has(line.start)));
+
   state.selectedLineIndex = state.detections.length ? 0 : -1;
   // Keep the closest line selected as sensitivity or image pixels change.
   state.detections.forEach((line, index) => {
@@ -388,6 +412,7 @@ function runDetection({ announce = true } = {}) {
       state.selectedLineIndex = index;
     }
   });
+  if (!state.detections.length) state.previewRepair = false;
   renderPreview();
   updateDetectionSummary();
   if (announce) {
@@ -396,47 +421,50 @@ function runDetection({ announce = true } = {}) {
   }
 }
 
-function interpolateDetectedLine(data, width, height, line) {
-  const padding = Math.max(2, Math.min(12, Math.ceil(line.width * 0.8)));
-  const top = Math.max(0, line.start - padding);
-  const bottom = Math.min(height - 1, line.end + padding);
-
+function repairedRowImage(imageData, line) {
+  const { width, height, data } = imageData;
+  const row = line.start;
+  // Sample outside the detected stripe, but write only the selected pixel row.
+  const top = Math.max(0, (line.bandStart ?? row) - 1);
+  const bottom = Math.min(height - 1, (line.bandEnd ?? row) + 1);
+  const proportion = bottom === top ? 0 : (row - top) / (bottom - top);
+  const strip = new ImageData(width, 1);
   for (let x = 0; x < width; x += 1) {
-    const topPixel = (top * width + x) * 4;
-    const bottomPixel = (bottom * width + x) * 4;
-    for (let y = line.start; y <= line.end; y += 1) {
-      const destination = (y * width + x) * 4;
-      const proportion = bottom === top ? 0 : (y - top) / (bottom - top);
-      data[destination] = Math.round(data[topPixel] * (1 - proportion) + data[bottomPixel] * proportion);
-      data[destination + 1] = Math.round(data[topPixel + 1] * (1 - proportion) + data[bottomPixel + 1] * proportion);
-      data[destination + 2] = Math.round(data[topPixel + 2] * (1 - proportion) + data[bottomPixel + 2] * proportion);
-      data[destination + 3] = Math.round(data[topPixel + 3] * (1 - proportion) + data[bottomPixel + 3] * proportion);
+    for (let channel = 0; channel < 4; channel += 1) {
+      strip.data[x * 4 + channel] = Math.round(
+        data[(top * width + x) * 4 + channel] * (1 - proportion)
+        + data[(bottom * width + x) * 4 + channel] * proportion);
     }
   }
+  return strip;
 }
 
-function removeDetectedLines() {
-  if (!state.workingImageData || !state.detections.length) return;
-
+function fixSelectedRow() {
+  const line = state.detections[state.selectedLineIndex];
+  if (!state.workingImageData || !line) return;
   state.history.push({
     imageData: cloneImageData(state.workingImageData),
-    detections: state.detections.map((line) => ({ ...line })),
+    detections: state.detections.map((candidate) => ({ ...candidate })),
     selectedLineIndex: state.selectedLineIndex,
+    repairedRows: state.repairedRows.slice(),
     sensitivity: elements.sensitivity.value,
   });
-
+  const strip = repairedRowImage(state.workingImageData, line);
   const cleaned = cloneImageData(state.workingImageData);
-  const { width, height, data } = cleaned;
-  const removedCount = state.detections.length;
-
-  state.detections.forEach((line) => {
-    interpolateDetectedLine(data, width, height, line);
-  });
-
+  cleaned.data.set(strip.data, line.start * cleaned.width * 4);
   state.workingImageData = cleaned;
+  state.repairedRows.push(line.start);
+  state.previewRepair = false;
   renderWorkingImage();
   runDetection({ announce: false });
-  setStatus(`Removed ${removedCount} horizontal line${removedCount === 1 ? "" : "s"}`, "success");
+  setStatus(`Fixed row ${line.start + 1} · 1 pixel high`, "success");
+}
+
+function toggleRepairPreview() {
+  if (!state.detections.length) return;
+  state.previewRepair = !state.previewRepair;
+  renderPreview();
+  updateDetectionSummary();
 }
 
 function undoLastEdit() {
@@ -445,6 +473,8 @@ function undoLastEdit() {
   state.workingImageData = previous.imageData;
   state.detections = previous.detections;
   state.selectedLineIndex = previous.selectedLineIndex;
+  state.repairedRows = previous.repairedRows;
+  state.previewRepair = false;
   elements.sensitivity.value = previous.sensitivity;
   elements.sensitivityValue.textContent = `${previous.sensitivity}%`;
   renderWorkingImage();
@@ -455,6 +485,8 @@ function undoLastEdit() {
 function resetImage() {
   if (!state.sourceImageData) return;
   state.history = [];
+  state.repairedRows = [];
+  state.previewRepair = false;
   state.workingImageData = cloneImageData(state.sourceImageData);
   renderWorkingImage();
   runDetection();
@@ -505,6 +537,8 @@ function loadImageFile(file) {
     state.sourceImageData = imageContext.getImageData(0, 0, width, height);
     state.workingImageData = cloneImageData(state.sourceImageData);
     state.history = [];
+    state.repairedRows = [];
+    state.previewRepair = false;
     state.detections = [];
     state.selectedLineIndex = -1;
     setLoadedState(file, width, height);
@@ -568,8 +602,8 @@ elements.fileInput.addEventListener("change", (event) => {
 });
 elements.previousLineButton.addEventListener("click", () => cycleSelectedLine(-1));
 elements.nextLineButton.addEventListener("click", () => cycleSelectedLine(1));
-elements.detectButton.addEventListener("click", () => runDetection());
-elements.removeButton.addEventListener("click", removeDetectedLines);
+elements.previewRepairButton.addEventListener("click", toggleRepairPreview);
+elements.removeButton.addEventListener("click", fixSelectedRow);
 elements.undoButton.addEventListener("click", undoLastEdit);
 elements.resetButton.addEventListener("click", resetImage);
 elements.downloadButton.addEventListener("click", downloadImage);

@@ -8,7 +8,7 @@
       content="Remove distracting horizontal lines from an image in your browser."
     />
     <title>LineLift — remove image lines</title>
-    <link rel="stylesheet" href="styles.css?v=horizontal-focus-1" />
+    <link rel="stylesheet" href="styles.css?v=pixel-fisheye-1" />
   </head>
   <body>
     <header class="topbar">
@@ -47,7 +47,7 @@
           <p class="eyebrow">Image workspace</p>
           <h1 id="pageTitle">Clean up horizontal lines.</h1>
           <p class="intro-copy">
-            Drop in an image, inspect each horizontal line, and remove the detected lines.
+            Drop in an image, inspect a single pixel row through the fisheye, and preview its repair.
           </p>
         </div>
         <div class="privacy-note">
@@ -91,7 +91,7 @@
 
           <div class="canvas-area hidden" id="canvasArea">
             <div class="canvas-stage" id="canvasStage">
-              <canvas id="previewCanvas" aria-label="Horizontal line inspection preview with graduated vertical magnification"></canvas>
+              <canvas id="previewCanvas" aria-label="Fisheye image preview centered on one selected pixel row"></canvas>
               <canvas id="guideCanvas" aria-hidden="true"></canvas>
             </div>
             <div class="editor-toolbar" id="editorToolbar" role="group" aria-label="Preview controls">
@@ -129,7 +129,7 @@
               <div class="detection-card">
                 <div class="detection-card-top">
                   <div>
-                    <span class="metric-label">Detected guides</span>
+                    <span class="metric-label">Candidate rows</span>
                     <strong id="lineCount">0</strong>
                   </div>
                   <span class="metric-status" id="detectionStatus">Waiting</span>
@@ -138,18 +138,12 @@
               </div>
 
               <div class="control-actions">
-                <button class="button button-secondary button-wide" id="detectButton" type="button" disabled>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                    <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8" />
-                  </svg>
-                  <span id="detectButtonLabel">Detect horizontal lines</span>
-                </button>
+                <button class="button button-secondary button-wide" id="previewRepairButton" type="button" aria-pressed="false" disabled>Preview fix</button>
                 <button class="button button-primary button-wide" id="removeButton" type="button" disabled>
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                   </svg>
-                  <span id="removeButtonLabel">Remove horizontal lines</span>
+                  <span id="removeButtonLabel">Fix selected row</span>
                 </button>
               </div>
 
@@ -162,9 +156,9 @@
             </div>
           </div>
           <div class="guide-legend" aria-label="Highlight colors">
-            <span><i class="legend-line legend-selected" aria-hidden="true"></i>Selected · 5×</span>
-            <span><i class="legend-line legend-horizontal" aria-hidden="true"></i>Nearby lines · 4×, 3×, 2×, 1×</span>
-            <span>Magnification and highlights are preview only.</span>
+            <span><i class="legend-line legend-selected" aria-hidden="true"></i>Selected · 1 pixel row</span>
+            <span><i class="legend-line legend-horizontal" aria-hidden="true"></i>Fisheye around the selected row</span>
+            <span>Preview fix shows the repair before applying it.</span>
           </div>
           <p class="notice notice-error hidden" id="errorNotice" role="alert"></p>
         </section>
@@ -177,7 +171,7 @@
       </footer>
     </main>
 
-    <script src="app.js?v=horizontal-focus-1"></script>
+    <script src="app.js?v=pixel-fisheye-1"></script>
   </body>
 </html>
 
